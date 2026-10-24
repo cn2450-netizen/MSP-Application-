@@ -1,0 +1,195 @@
+name: msp-platform
+
+# Phase 1: identity (authentik) + monitoring (Influx/Loki/Grafana) + ingest gateway.
+# Only `edge` services publish ports (bound to BIND_ADDR, fronted by NPM).
+# Data stores sit on `backend`, which is internal: no published ports, no internet.
+
+x-common: &common
+  restart: unless-stopped
+  security_opt:
+    - no-new-privileges:true
+
+networks:
+  edge: {}
+  backend:
+    internal: true
+
+secrets:
+  postgres_password:
+    file: ./secrets/postgres_password
+  authentik_db_password:
+    file: ./secrets/authentik_db_password
+  authentik_secret_key:
+    file: ./secrets/authentik_secret_key
+  authentik_bootstrap_password:
+    file: ./secrets/authentik_bootstrap_password
+  influx_admin_password:
+    file: ./secrets/influx_admin_password
+  influx_admin_token:
+    file: ./secrets/influx_admin_token
+  grafana_admin_password:
+    file: ./secrets/grafana_admin_password
+  grafana_oauth_secret:
+    file: ./secrets/grafana_oauth_secret
+
+volumes:
+  postgres-data:
+  redis-data:
+  authentik-media:
+  influx-data:
+  influx-config:
+  loki-data:
+  grafana-data:
+
+services:
+  postgres:
+    <<: *common
+    image: postgres:${POSTGRES_TAG}
+    environment:
+      POSTGRES_USER: msp_admin
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_DB: postgres
+    secrets: [postgres_password, authentik_db_password]
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./config/postgres/init:/docker-entrypoint-initdb.d:ro
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U msp_admin -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    <<: *common
+    image: redis:${REDIS_TAG}
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    volumes:
+      - redis-data:/data
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  authentik-server:
+    <<: *common
+    image: ghcr.io/goauthentik/server:${AUTHENTIK_TAG}
+    command: server
+    environment: &authentik-env
+      AUTHENTIK_REDIS__HOST: redis
+      AUTHENTIK_POSTGRESQL__HOST: postgres
+      AUTHENTIK_POSTGRESQL__USER: authentik
+      AUTHENTIK_POSTGRESQL__NAME: authentik
+      AUTHENTIK_POSTGRESQL__PASSWORD: file:///run/secrets/authentik_db_password
+      AUTHENTIK_SECRET_KEY: file:///run/secrets/authentik_secret_key
+      AUTHENTIK_BOOTSTRAP_PASSWORD: file:///run/secrets/authentik_bootstrap_password
+      AUTHENTIK_BOOTSTRAP_EMAIL: ${ADMIN_EMAIL}
+      AUTHENTIK_DISABLE_UPDATE_CHECK: "true"
+      AUTHENTIK_DISABLE_STARTUP_ANALYTICS: "true"
+      AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
+    secrets: [authentik_db_password, authentik_secret_key, authentik_bootstrap_password]
+    volumes:
+      - authentik-media:/media
+    ports:
+      - "${BIND_ADDR}:${AUTHENTIK_PORT}:9000"
+    networks: [edge, backend]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  authentik-worker:
+    <<: *common
+    image: ghcr.io/goauthentik/server:${AUTHENTIK_TAG}
+    command: worker
+    environment: *authentik-env
+    secrets: [authentik_db_password, authentik_secret_key, authentik_bootstrap_password]
+    volumes:
+      - authentik-media:/media
+    networks: [edge, backend]   # edge: outbound LDAPS to Active Directory
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  influxdb:
+    <<: *common
+    image: influxdb:${INFLUX_TAG}
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: msp-admin
+      DOCKER_INFLUXDB_INIT_PASSWORD_FILE: /run/secrets/influx_admin_password
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN_FILE: /run/secrets/influx_admin_token
+      DOCKER_INFLUXDB_INIT_ORG: msp
+      DOCKER_INFLUXDB_INIT_BUCKET: platform
+      DOCKER_INFLUXDB_INIT_RETENTION: 30d
+      INFLUXD_REPORTING_DISABLED: "true"
+    secrets: [influx_admin_password, influx_admin_token]
+    volumes:
+      - influx-data:/var/lib/influxdb2
+      - influx-config:/etc/influxdb2
+    networks: [backend]
+
+  loki:
+    <<: *common
+    image: grafana/loki:${LOKI_TAG}
+    command: ["-config.file=/etc/loki/loki.yml"]
+    volumes:
+      - ./config/loki/loki.yml:/etc/loki/loki.yml:ro
+      - loki-data:/loki
+    networks: [backend]
+
+  # Authenticates agents, maps each credential to exactly one tenant, and only
+  # exposes the write endpoints. Loki/Influx are never reachable directly.
+  gateway:
+    <<: *common
+    image: nginxinc/nginx-unprivileged:${NGINX_TAG}
+    read_only: true
+    tmpfs:
+      - /tmp
+    volumes:
+      - ./config/gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./generated/gateway:/etc/nginx/tenants:ro
+    ports:
+      - "${BIND_ADDR}:${GATEWAY_PORT}:8080"
+    networks: [edge, backend]
+    depends_on: [loki, influxdb]
+
+  grafana:
+    <<: *common
+    image: grafana/grafana-oss:${GRAFANA_TAG}
+    env_file:
+      - ./generated/grafana.env   # org mapping, rendered by scripts/render-config.sh
+    environment:
+      GF_SERVER_ROOT_URL: https://${GRAFANA_HOST}
+      GF_SECURITY_ADMIN_USER: msp-admin
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_admin_password
+      GF_SECURITY_COOKIE_SECURE: "true"
+      GF_SECURITY_COOKIE_SAMESITE: lax
+      GF_SECURITY_DISABLE_GRAVATAR: "true"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_USERS_AUTO_ASSIGN_ORG: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_AUTH_OAUTH_AUTO_LOGIN: "true"
+      GF_AUTH_SIGNOUT_REDIRECT_URL: https://${AUTH_HOST}/application/o/grafana/end-session/
+      GF_AUTH_GENERIC_OAUTH_ENABLED: "true"
+      GF_AUTH_GENERIC_OAUTH_NAME: authentik
+      GF_AUTH_GENERIC_OAUTH_CLIENT_ID: grafana
+      GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET__FILE: /run/secrets/grafana_oauth_secret
+      GF_AUTH_GENERIC_OAUTH_SCOPES: openid profile email
+      GF_AUTH_GENERIC_OAUTH_AUTH_URL: https://${AUTH_HOST}/application/o/authorize/
+      GF_AUTH_GENERIC_OAUTH_TOKEN_URL: https://${AUTH_HOST}/application/o/token/
+      GF_AUTH_GENERIC_OAUTH_API_URL: https://${AUTH_HOST}/application/o/userinfo/
+      GF_AUTH_GENERIC_OAUTH_USE_PKCE: "true"
+      GF_AUTH_GENERIC_OAUTH_ALLOW_ASSIGN_GRAFANA_ADMIN: "true"
+      GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH: "contains(groups[*], 'msp-admins') && 'GrafanaAdmin' || 'Viewer'"
+      GF_AUTH_GENERIC_OAUTH_ORG_ATTRIBUTE_PATH: groups
+    secrets: [grafana_admin_password, grafana_oauth_secret]
+    volumes:
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "${BIND_ADDR}:${GRAFANA_PORT}:3000"
+    networks: [edge, backend]
+    depends_on: [influxdb, loki]

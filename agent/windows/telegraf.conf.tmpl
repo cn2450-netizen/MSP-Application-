@@ -1,0 +1,77 @@
+# Windows agent config template. install-agent.ps1 fills the {{PLACEHOLDERS}}.
+# One agent ships metrics -> InfluxDB (customer bucket) and event logs -> Loki (customer tenant).
+
+[global_tags]
+  customer = "{{CUSTOMER}}"        # convenience label only; isolation is enforced server-side
+
+[agent]
+  interval = "30s"
+  flush_interval = "30s"
+  round_interval = true
+  omit_hostname = false
+
+# ── Outputs ──────────────────────────────────────────────────────────────────
+
+[[outputs.influxdb_v2]]
+  urls = ["https://{{INGEST_HOST}}/influx"]
+  token = "{{INFLUX_WRITE_TOKEN}}"      # bucket-scoped, write-only
+  organization = "msp"
+  bucket = "cust_{{CUSTOMER}}"
+  namedrop = ["win_eventlog"]
+
+[[outputs.loki]]
+  domain = "https://{{INGEST_HOST}}"
+  endpoint = "/loki/api/v1/push"
+  namepass = ["win_eventlog"]
+  [outputs.loki.headers]
+    Authorization = "Bearer {{LOKI_PUSH_KEY}}"
+
+# ── Core health ──────────────────────────────────────────────────────────────
+
+[[inputs.cpu]]
+  percpu = false
+  totalcpu = true
+  report_active = false
+
+[[inputs.mem]]
+
+[[inputs.system]]
+
+[[inputs.disk]]
+  ignore_fs = ["tmpfs", "devtmpfs", "devfs", "iso9660", "overlay", "aufs", "squashfs"]
+
+[[inputs.diskio]]
+
+[[inputs.net]]
+
+# Critical services. Extend per customer (SQL, AD, backup agents, AV, ...).
+[[inputs.win_services]]
+  service_names = [
+    "EventLog", "Winmgmt", "RpcSs", "Schedule", "W32Time", "Dnscache",
+    "LanmanServer", "LanmanWorkstation", "MpsSvc", "WinDefend", "wuauserv", "BITS",
+  ]
+
+# BitLocker (protection status, encryption %, locked) — see bitlocker.ps1
+[[inputs.exec]]
+  commands = ["powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{{AGENT_DIR}}\\bitlocker.ps1\""]
+  data_format = "influx"
+  timeout = "20s"
+  interval = "300s"
+
+# ── Logs (Warning and above; deliberately NOT the Security log) ──────────────
+
+[[inputs.win_eventlog]]
+  eventlog_name = "System"
+  xpath_query = '''
+    <QueryList><Query Id="0" Path="System">
+      <Select Path="System">*[System[(Level=1 or Level=2 or Level=3)]]</Select>
+    </Query></QueryList>'''
+  from_beginning = false
+
+[[inputs.win_eventlog]]
+  eventlog_name = "Application"
+  xpath_query = '''
+    <QueryList><Query Id="0" Path="Application">
+      <Select Path="Application">*[System[(Level=1 or Level=2 or Level=3)]]</Select>
+    </Query></QueryList>'''
+  from_beginning = false
