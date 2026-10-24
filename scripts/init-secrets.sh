@@ -33,6 +33,11 @@ gen grafana_oauth_secret
 
 # Gateway map must exist before nginx starts (empty = no agent can push yet).
 [[ -e generated/gateway/loki.map ]] || : > generated/gateway/loki.map
+# Same pattern as ./secrets: parent dir 700 keeps other host users out, while the
+# mounted dir/file are readable by the unprivileged nginx uid inside the container.
+chmod 700 generated
+chmod 755 generated/gateway
+chmod 644 generated/gateway/loki.map
 [[ -e generated/customers.tsv ]]    || : > generated/customers.tsv
 
 "$(dirname "$0")/render-config.sh"

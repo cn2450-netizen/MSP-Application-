@@ -1,6 +1,7 @@
 name: msp-platform
 
 # Phase 1: identity (authentik) + monitoring (Influx/Loki/Grafana) + ingest gateway.
+# ALL state lives under DATA_DIR (the iSCSI LUN) — the VM itself is disposable.
 # Only `edge` services publish ports (bound to BIND_ADDR, fronted by NPM).
 # Data stores sit on `backend`, which is internal: no published ports, no internet.
 
@@ -32,15 +33,6 @@ secrets:
   grafana_oauth_secret:
     file: ./secrets/grafana_oauth_secret
 
-volumes:
-  postgres-data:
-  redis-data:
-  authentik-media:
-  influx-data:
-  influx-config:
-  loki-data:
-  grafana-data:
-
 services:
   postgres:
     <<: *common
@@ -51,24 +43,11 @@ services:
       POSTGRES_DB: postgres
     secrets: [postgres_password, authentik_db_password]
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - ${DATA_DIR}/postgres:/var/lib/postgresql/data
       - ./config/postgres/init:/docker-entrypoint-initdb.d:ro
     networks: [backend]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U msp_admin -d postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
-  redis:
-    <<: *common
-    image: redis:${REDIS_TAG}
-    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
-    volumes:
-      - redis-data:/data
-    networks: [backend]
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -78,7 +57,6 @@ services:
     image: ghcr.io/goauthentik/server:${AUTHENTIK_TAG}
     command: server
     environment: &authentik-env
-      AUTHENTIK_REDIS__HOST: redis
       AUTHENTIK_POSTGRESQL__HOST: postgres
       AUTHENTIK_POSTGRESQL__USER: authentik
       AUTHENTIK_POSTGRESQL__NAME: authentik
@@ -91,13 +69,12 @@ services:
       AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
     secrets: [authentik_db_password, authentik_secret_key, authentik_bootstrap_password]
     volumes:
-      - authentik-media:/media
+      - ${DATA_DIR}/authentik-media:/media
     ports:
       - "${BIND_ADDR}:${AUTHENTIK_PORT}:9000"
     networks: [edge, backend]
     depends_on:
       postgres: { condition: service_healthy }
-      redis: { condition: service_healthy }
 
   authentik-worker:
     <<: *common
@@ -106,11 +83,10 @@ services:
     environment: *authentik-env
     secrets: [authentik_db_password, authentik_secret_key, authentik_bootstrap_password]
     volumes:
-      - authentik-media:/media
+      - ${DATA_DIR}/authentik-media:/media
     networks: [edge, backend]   # edge: outbound LDAPS to Active Directory
     depends_on:
       postgres: { condition: service_healthy }
-      redis: { condition: service_healthy }
 
   influxdb:
     <<: *common
@@ -126,8 +102,8 @@ services:
       INFLUXD_REPORTING_DISABLED: "true"
     secrets: [influx_admin_password, influx_admin_token]
     volumes:
-      - influx-data:/var/lib/influxdb2
-      - influx-config:/etc/influxdb2
+      - ${DATA_DIR}/influx-data:/var/lib/influxdb2
+      - ${DATA_DIR}/influx-config:/etc/influxdb2
     networks: [backend]
 
   loki:
@@ -136,7 +112,7 @@ services:
     command: ["-config.file=/etc/loki/loki.yml"]
     volumes:
       - ./config/loki/loki.yml:/etc/loki/loki.yml:ro
-      - loki-data:/loki
+      - ${DATA_DIR}/loki:/loki
     networks: [backend]
 
   # Authenticates agents, maps each credential to exactly one tenant, and only
@@ -188,7 +164,7 @@ services:
       GF_AUTH_GENERIC_OAUTH_ORG_ATTRIBUTE_PATH: groups
     secrets: [grafana_admin_password, grafana_oauth_secret]
     volumes:
-      - grafana-data:/var/lib/grafana
+      - ${DATA_DIR}/grafana:/var/lib/grafana
     ports:
       - "${BIND_ADDR}:${GRAFANA_PORT}:3000"
     networks: [edge, backend]

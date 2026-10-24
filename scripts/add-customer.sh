@@ -22,12 +22,34 @@ set -a; source .env; set +a
 INFLUX_TOKEN="$(cat secrets/influx_admin_token)"
 GF_AUTH="msp-admin:$(cat secrets/grafana_admin_password)"
 GF_URL="http://${BIND_ADDR}:${GRAFANA_PORT}"
-influx() { docker compose exec -T -e INFLUX_TOKEN="$INFLUX_TOKEN" influxdb influx "$@" --org msp --json; }
+influx_raw() { docker compose exec -T -e INFLUX_TOKEN="$INFLUX_TOKEN" influxdb influx "$@"; }
+influx() { influx_raw "$@" --org msp --json; }
+
+# If any step fails, undo what was already created so a re-run starts clean.
+bucket_id="" write_auth="" read_auth="" loki_key="" org_id=""
+rollback() {
+  local rc=$?
+  trap - ERR
+  echo "FAILED (exit ${rc}) — rolling back partial setup for '${slug}'" >&2
+  if [[ -n "$org_id" ]]; then curl -fsS -u "$GF_AUTH" -X DELETE "$GF_URL/api/orgs/$org_id" >/dev/null 2>&1 || true; fi
+  if [[ -n "$loki_key" ]]; then
+    sed -i "/${loki_key}/d" generated/gateway/loki.map
+    docker compose exec -T gateway nginx -s reload >/dev/null 2>&1 || true
+  fi
+  for a in "$write_auth" "$read_auth"; do
+    if [[ -n "$a" ]]; then influx_raw auth delete --id "$a" >/dev/null 2>&1 || true; fi
+  done
+  if [[ -n "$bucket_id" ]]; then influx_raw bucket delete --id "$bucket_id" >/dev/null 2>&1 || true; fi
+  exit "$rc"
+}
+trap rollback ERR
 
 echo "[1/5] Influx bucket + tokens"
 bucket_id="$(influx bucket create --name "cust_${slug}" --retention "${days}d" | jq -r '.id')"
-write_token="$(influx auth create --write-bucket "$bucket_id" --description "agent-write ${slug}" | jq -r '.token')"
-read_token="$(influx auth create --read-bucket "$bucket_id" --description "grafana-read ${slug}" | jq -r '.token')"
+out="$(influx auth create --write-bucket "$bucket_id" --description "agent-write ${slug}")"
+write_auth="$(jq -r '.id' <<<"$out")"; write_token="$(jq -r '.token' <<<"$out")"
+out="$(influx auth create --read-bucket "$bucket_id" --description "grafana-read ${slug}")"
+read_auth="$(jq -r '.id' <<<"$out")"; read_token="$(jq -r '.token' <<<"$out")"
 
 echo "[2/5] Loki tenant key + gateway map"
 loki_key="$(openssl rand -hex 32)"

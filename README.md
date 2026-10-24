@@ -4,7 +4,11 @@ Self-hosted MSP tooling: single sign-on with MFA, per-customer monitoring, and (
 
 ## Status
 
-**Phase 1 (this commit): foundation + Windows monitoring.** The config has been syntax-checked only. It has **not been started on a Docker host yet**, so expect first-boot fixes. Image tags in `.env.example` are the last versions known when written; check for newer releases before deploying.
+**Phase 1 (foundation + Windows monitoring) is built and tested on a Debian 13 VM with an iSCSI-backed data volume.**
+
+Tested: full stack boots; customer onboarding (with rollback on failure); 19 cross-tenant isolation checks pass (`scripts/test-isolation.sh`); VM rebuild from scratch using only the bootstrap script and the LUKS key; clean reboot with automatic LUN attach.
+
+**Not yet tested:** the Windows agent on a real Windows machine, and the authentik UI setup (MFA, AD/LDAPS, Grafana OIDC login) — those steps are manual and documented below. Image tags in `.env.example` were the newest that pulled on amd64 when tested; check for newer security releases before a production deploy.
 
 | Phase | Scope |
 |---|---|
@@ -32,6 +36,24 @@ Isolation, enforced server-side at every layer:
   - `msp-admins`: everything
   - `tech-<slug>`: Editor in that customer's org (so techs only see customers they're assigned)
   - `cust-<slug>-users`: Viewer in that customer's org
+
+## Disposable VM, persistent data
+
+The Docker VM is cattle: destroy it any time. **All state lives on one iSCSI LUN** (LUKS2-encrypted, XFS inside), mounted at `/srv/msp`: databases under `/srv/msp/data`, plus this repo, `secrets/` and `generated/` under `/srv/msp/app`. The SAN only ever sees ciphertext.
+
+Rebuild a node (fresh Debian, storage NIC up with a static IP and **no gateway**):
+
+```bash
+sudo scripts/bootstrap-vm.sh \
+  --portal 192.168.20.251 --target iqn.2005-10.org.freenas.ctl:msp-apps \
+  --initiator iqn.2026-10.lan.msp:msp-app --luks-key /path/to/msp-luks.key
+# first build only, on a blank LUN:  add --init-new-lun --repo <git url>
+```
+
+- **Keep the LUKS key safe and offline** (password manager + a printed copy). Without it the data is unrecoverable. It is never stored in the repo or on the SAN.
+- **Only one VM may attach the LUN at a time.** Destroy the old VM first, and restrict the target to a single initiator name and the VM's storage IP, with CHAP.
+- At boot, `msp-data.service` unlocks and mounts the LUN, and Docker is ordered after it. If the LUN is missing, Docker refuses to start rather than write empty data to the VM's disk. On shutdown Docker stops first, then the volume unmounts cleanly.
+- Don't `umount` or log out of iSCSI while containers run. Use `docker compose down` first.
 
 ## Deploy
 
