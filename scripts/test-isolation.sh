@@ -5,8 +5,8 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 set -a; source .env; set +a
-GW="http://127.0.0.1:${GATEWAY_PORT}"
-GF="http://127.0.0.1:${GRAFANA_PORT}"
+GW="http://${BIND_ADDR}:${GATEWAY_PORT}"
+GF="http://${BIND_ADDR}:${GRAFANA_PORT}"
 GFA="msp-admin:$(cat secrets/grafana_admin_password)"
 pass=0; fail=0
 check() { # check <name> <expected> <actual>

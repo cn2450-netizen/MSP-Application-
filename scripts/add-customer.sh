@@ -22,15 +22,26 @@ set -a; source .env; set +a
 INFLUX_TOKEN="$(cat secrets/influx_admin_token)"
 GF_AUTH="msp-admin:$(cat secrets/grafana_admin_password)"
 GF_URL="http://${BIND_ADDR}:${GRAFANA_PORT}"
+
+source scripts/lib/authentik.sh
+ak_login
+grafana_app="$(ak_req GET core/applications/grafana/ 2>/dev/null | jq -r '.pk // empty')"
+[[ -n "$grafana_app" ]] || { echo "Run scripts/setup-authentik.sh first: the Grafana application is not in authentik yet."; exit 1; }
 influx_raw() { docker compose exec -T -e INFLUX_TOKEN="$INFLUX_TOKEN" influxdb influx "$@"; }
 influx() { influx_raw "$@" --org msp --json; }
 
 # If any step fails, undo what was already created so a re-run starts clean.
-bucket_id="" write_auth="" read_auth="" loki_key="" org_id=""
+bucket_id="" write_auth="" read_auth="" loki_key="" org_id="" groups_made=0
 rollback() {
   local rc=$?
   trap - ERR
   echo "FAILED (exit ${rc}) — rolling back partial setup for '${slug}'" >&2
+  if [[ "$groups_made" == 1 ]]; then
+    for g in "tech-${slug}" "cust-${slug}-users"; do
+      gp="$(ak_req GET "core/groups/?name=${g}" 2>/dev/null | jq -r '.results[0].pk // empty' || true)"
+      if [[ -n "$gp" ]]; then ak_req DELETE "core/groups/${gp}/" >/dev/null 2>&1 || true; fi
+    done
+  fi
   if [[ -n "$org_id" ]]; then curl -fsS -u "$GF_AUTH" -X DELETE "$GF_URL/api/orgs/$org_id" >/dev/null 2>&1 || true; fi
   if [[ -n "$loki_key" ]]; then
     sed -i "/${loki_key}/d" generated/gateway/loki.map
@@ -44,19 +55,19 @@ rollback() {
 }
 trap rollback ERR
 
-echo "[1/5] Influx bucket + tokens"
+echo "[1/6] Influx bucket + tokens"
 bucket_id="$(influx bucket create --name "cust_${slug}" --retention "${days}d" | jq -r '.id')"
 out="$(influx auth create --write-bucket "$bucket_id" --description "agent-write ${slug}")"
 write_auth="$(jq -r '.id' <<<"$out")"; write_token="$(jq -r '.token' <<<"$out")"
 out="$(influx auth create --read-bucket "$bucket_id" --description "grafana-read ${slug}")"
 read_auth="$(jq -r '.id' <<<"$out")"; read_token="$(jq -r '.token' <<<"$out")"
 
-echo "[2/5] Loki tenant key + gateway map"
+echo "[2/6] Loki tenant key + gateway map"
 loki_key="$(openssl rand -hex 32)"
 printf '"Bearer %s" "%s";\n' "$loki_key" "$slug" >> generated/gateway/loki.map
 docker compose exec -T gateway nginx -s reload
 
-echo "[3/5] Grafana org + datasources"
+echo "[3/6] Grafana org + datasources"
 gf() { curl -fsS -u "$GF_AUTH" -H 'Content-Type: application/json' "$@"; }
 org_id="$(gf -X POST "$GF_URL/api/orgs" -d "$(jq -n --arg n "$slug" '{name:$n}')" | jq -r '.orgId')"
 
@@ -70,11 +81,18 @@ gf -X POST "$GF_URL/api/datasources" -H "X-Grafana-Org-Id: $org_id" -d "$(jq -n 
   '{name:"Logs",uid:"loki",type:"loki",access:"proxy",url:"http://loki:3100",
     jsonData:{httpHeaderName1:"X-Scope-OrgID"},secureJsonData:{httpHeaderValue1:$s}}')" >/dev/null
 
-echo "[4/5] Starter dashboard"
+echo "[4/6] Starter dashboard"
 gf -X POST "$GF_URL/api/dashboards/db" -H "X-Grafana-Org-Id: $org_id" \
   -d "$(jq -n --slurpfile d dashboards/windows-overview.json '{dashboard:$d[0],overwrite:true}')" >/dev/null
 
-echo "[5/5] Registry + Grafana org mapping"
+echo "[5/6] authentik groups + Grafana access"
+groups_made=1
+tech_grp="$(ak_group "tech-${slug}")"
+cust_grp="$(ak_group "cust-${slug}-users")"
+ak_bind_group "$grafana_app" "$tech_grp"
+ak_bind_group "$grafana_app" "$cust_grp"
+
+echo "[6/6] Registry + Grafana org mapping"
 printf '%s\t%s\t%s\n' "$slug" "$name" "$(date -u +%FT%TZ)" >> generated/customers.tsv
 scripts/render-config.sh
 docker compose up -d grafana   # recreates the container so the new org mapping is loaded
@@ -89,9 +107,9 @@ influx bucket:   cust_${slug}
 influx WRITE tk: ${write_token}
 loki push key:   ${loki_key}
 
-authentik groups to create/assign:
-  tech-${slug}          (your techs for this customer)
-  cust-${slug}-users    (the customer's own staff)
+authentik groups (already created and allowed into Grafana):
+  tech-${slug}          add your techs for this customer
+  cust-${slug}-users    add the customer's own staff
 EOF
 )
 echo

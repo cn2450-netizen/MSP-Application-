@@ -74,7 +74,12 @@ docker compose up -d postgres redis authentik-server authentik-worker
 
 If NPM runs in Docker on this host, either keep `BIND_ADDR=127.0.0.1` and forward to the host's IP, or attach the services to NPM's Docker network instead of publishing ports.
 
-### Configure authentik (once, in the UI)
+### Configure authentik
+
+Run `scripts/setup-authentik.sh` once authentik is healthy. It enforces MFA for every login (WebAuthn or TOTP, enrolled at first sign-in), creates `msp-admins`, and registers Grafana as an OIDC app that only bound groups can open. It's repeatable and uses a short-lived API token that it deletes afterwards. `add-customer.sh` creates each customer's `tech-<slug>` and `cust-<slug>-users` groups and binds them to Grafana; `scripts/sync-customer-groups.sh` repairs or backfills them.
+
+What stays manual, in the UI: create your named admin user (then lock down `akadmin`), and the AD source in step 3 below. Steps 2, 5 and 6 of the list below are automated by the script and are kept as reference.
+
 
 1. Sign in at `https://AUTH_HOST/if/flow/initial-setup/` as `akadmin` (password printed by `init-secrets.sh`). Create your named admin user, then disable or lock down `akadmin`.
 2. **MFA**: Flows & Stages → Stages → edit the default *Authenticator Validation* stage (in `default-authentication-mfa-validation`): set *Not configured action* to **Force the user to configure an authenticator**, allow TOTP and WebAuthn. Fewer options is better. Prefer WebAuthn for staff.
