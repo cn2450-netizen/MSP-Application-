@@ -30,6 +30,9 @@ gen grafana_admin_password 16
 gen grafana_oauth_secret
 
 [[ -e .env ]] || { cp .env.example .env; echo "Created .env — edit hostnames before 'docker compose up'."; }
+chmod 600 .env
+# authentik reads its first-boot admin password from an env var (no file:// support), so mirror the secret there.
+grep -q '^AUTHENTIK_BOOTSTRAP_PASSWORD=' .env || echo "AUTHENTIK_BOOTSTRAP_PASSWORD=$(cat secrets/authentik_bootstrap_password)" >> .env
 
 # Gateway map must exist before nginx starts (empty = no agent can push yet).
 [[ -e generated/gateway/loki.map ]] || : > generated/gateway/loki.map
@@ -43,7 +46,7 @@ chmod 644 generated/gateway/loki.map
 "$(dirname "$0")/render-config.sh"
 
 echo
-echo "authentik first login:  akadmin / $(cat secrets/authentik_bootstrap_password)   (https://<AUTH_HOST>/if/flow/initial-setup/)"
+echo "authentik first login:  akadmin / $(cat secrets/authentik_bootstrap_password)   (sign in at https://<AUTH_HOST>/ — NOT /initial-setup/, which only works on an empty install)"
 echo "Grafana break-glass:    msp-admin / $(cat secrets/grafana_admin_password)   (login form is disabled; API only)"
 echo "OAuth client secret for Grafana (paste into the authentik provider): secrets/grafana_oauth_secret"
 echo "Back up ./secrets somewhere safe and offline — losing it means losing the data keys."

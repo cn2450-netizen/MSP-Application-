@@ -81,7 +81,7 @@ Run `scripts/setup-authentik.sh` once authentik is healthy. It enforces MFA for 
 What stays manual, in the UI: create your named admin user (then lock down `akadmin`), and the AD source in step 3 below. Steps 2, 5 and 6 of the list below are automated by the script and are kept as reference.
 
 
-1. Sign in at `https://AUTH_HOST/if/flow/initial-setup/` as `akadmin` (password printed by `init-secrets.sh`). Create your named admin user, then disable or lock down `akadmin`.
+1. Sign in at `https://AUTH_HOST/` as `akadmin` (password printed by `init-secrets.sh`, also in `secrets/authentik_bootstrap_password`). Do not use `/if/flow/initial-setup/`: it only works on an install with no users. Create your named admin user, then disable or lock down `akadmin`.
 2. **MFA**: Flows & Stages → Stages → edit the default *Authenticator Validation* stage (in `default-authentication-mfa-validation`): set *Not configured action* to **Force the user to configure an authenticator**, allow TOTP and WebAuthn. Fewer options is better. Prefer WebAuthn for staff.
 3. **AD users (internal team)**: Directory → Federation & Social login → Create **LDAP Source**. Use `ldaps://` with your CA's cert uploaded as a Certificate Key Pair, a read-only bind account, and your user/group base DNs. Map AD groups to authentik groups.
 4. **Local users (customers)**: create them under Directory → Users and assign to `cust-<slug>-users`.

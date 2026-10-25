@@ -62,7 +62,8 @@ services:
       AUTHENTIK_POSTGRESQL__NAME: authentik
       AUTHENTIK_POSTGRESQL__PASSWORD: file:///run/secrets/authentik_db_password
       AUTHENTIK_SECRET_KEY: file:///run/secrets/authentik_secret_key
-      AUTHENTIK_BOOTSTRAP_PASSWORD: file:///run/secrets/authentik_bootstrap_password
+      # NB: file:// is NOT supported for bootstrap vars (it would become the literal password). init-secrets.sh puts the value in .env.
+      AUTHENTIK_BOOTSTRAP_PASSWORD: ${AUTHENTIK_BOOTSTRAP_PASSWORD:?run scripts/init-secrets.sh first}
       AUTHENTIK_BOOTSTRAP_EMAIL: ${ADMIN_EMAIL}
       AUTHENTIK_DISABLE_UPDATE_CHECK: "true"
       AUTHENTIK_DISABLE_STARTUP_ANALYTICS: "true"

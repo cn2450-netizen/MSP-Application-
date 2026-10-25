@@ -14,6 +14,22 @@ source scripts/lib/authentik.sh
 command -v jq >/dev/null || { echo "jq is required"; exit 1; }
 ak_login
 
+echo "[0/3] Check akadmin does not use a known password"
+if docker compose exec -T authentik-server ak shell -c "
+from authentik.core.models import User
+u = User.objects.get(username='akadmin')
+print('LEGACY' if u.check_password('file:///run/secrets/authentik_bootstrap_password') else 'OK')
+" </dev/null 2>/dev/null | grep -q LEGACY; then
+  docker compose exec -T authentik-server ak shell -c "
+from authentik.core.models import User
+u = User.objects.get(username='akadmin')
+u.set_password(open('/run/secrets/authentik_bootstrap_password').read().strip()); u.save()
+" </dev/null >/dev/null 2>&1
+  echo "    akadmin had a guessable password from an older config: replaced with secrets/authentik_bootstrap_password"
+else
+  echo "    ok"
+fi
+
 echo "[1/3] Enforce MFA"
 stage="$(ak_req GET 'stages/authenticator/validate/?name=default-authentication-mfa-validation' | jq -r '.results[0].pk')"
 totp="$(ak_req GET 'stages/authenticator/totp/?name=default-authenticator-totp-setup' | jq -r '.results[0].pk')"
@@ -62,4 +78,4 @@ ak_bind_group "$app" "$admins"
 echo "    Grafana provider $prov, application $app, access limited to bound groups"
 
 echo
-echo "Done. Next: sign in at https://${AUTH_HOST}/ as akadmin — you will be asked to enrol an authenticator."
+echo "Done. Next: sign in at https://${AUTH_HOST}/ as akadmin (password in secrets/authentik_bootstrap_password) — you will be asked to enrol an authenticator."
