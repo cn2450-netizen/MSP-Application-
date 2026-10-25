@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # One-time (and safe to re-run) authentik configuration:
-#   1. Enforce MFA for every login (WebAuthn or TOTP; users enrol on first sign-in)
+#   1. Enforce MFA for every login (TOTP authenticator app; users enrol on first sign-in)
 #   2. Create the msp-admins group
 #   3. Register Grafana as an OIDC application, visible only to groups bound to it
 #
@@ -33,11 +33,12 @@ fi
 echo "[1/3] Enforce MFA"
 stage="$(ak_req GET 'stages/authenticator/validate/?name=default-authentication-mfa-validation' | jq -r '.results[0].pk')"
 totp="$(ak_req GET 'stages/authenticator/totp/?name=default-authenticator-totp-setup' | jq -r '.results[0].pk')"
-webauthn="$(ak_req GET 'stages/authenticator/webauthn/?name=default-authenticator-webauthn-setup' | jq -r '.results[0].pk')"
-for v in stage totp webauthn; do [[ -n "${!v}" && "${!v}" != null ]] || { echo "default $v stage not found"; exit 1; }; done
-ak_req PATCH "stages/authenticator/validate/${stage}/" "$(jq -n --arg t "$totp" --arg w "$webauthn" \
-  '{not_configured_action:"configure",device_classes:["webauthn","totp"],configuration_stages:[$t,$w]}')" >/dev/null
-echo "    users without a second factor are now forced to enrol one at sign-in"
+for v in stage totp; do [[ -n "${!v}" && "${!v}" != null ]] || { echo "default $v stage not found"; exit 1; }; done
+# TOTP only: works with Google/Microsoft Authenticator, Authy, etc. Deliberately no WebAuthn: a passkey kept in
+# the same password manager as the password would not be a real second factor.
+ak_req PATCH "stages/authenticator/validate/${stage}/" "$(jq -n --arg t "$totp" \
+  '{not_configured_action:"configure",device_classes:["totp"],configuration_stages:[$t]}')" >/dev/null
+echo "    users without an authenticator app are now forced to enrol one at sign-in"
 
 echo "[2/3] Groups"
 admins="$(ak_group msp-admins)"
