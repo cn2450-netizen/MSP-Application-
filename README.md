@@ -115,6 +115,10 @@ Download `telegraf.exe` from the vendor's release page and note its published SH
   -TelegrafSha256 <published hash>
 ```
 
+## Agent footprint and outage buffering
+
+Measured on Telegraf 1.40.2 / Windows: the program is ~315 MB on disk (the agent log is capped at ~20 MB); an idle agent uses ~97 MB of RAM. Collected data is **never written to disk**: during an outage it waits in RAM (200,000 metrics, ~66 hours, ~140 MB; 5,000 event-log entries, ~85 MB), oldest dropped first when full. Both buffers completely full is ~330 MB (~500 MB allowing for Go GC slack), well inside a 1 GB ceiling. A restart or reboot during an outage loses what is buffered, and event-log entries written while the agent is stopped are not sent. Costs per item are in the comments of `agent/windows/telegraf.conf.tmpl`; re-measure before raising the limits.
+
 ## Security notes
 
 - Secrets are Docker secrets from `./secrets` (dir mode 700), never in `.env` or the compose file. Back `./secrets` up offline; it is excluded from git.

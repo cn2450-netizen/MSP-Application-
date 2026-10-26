@@ -13,6 +13,13 @@
   flush_interval = "30s"
   round_interval = true
   omit_hostname = false
+  # Outage buffering is RAM only (nothing is written to disk). Costs measured on Telegraf 1.40.2 / Windows:
+  #   idle agent ~97 MB | ~0.7 KB per buffered metric | ~17 KB per buffered event-log entry.
+  # The agent makes ~3,000 metrics/hour, so 200,000 metrics ride out ~66 hours offline (a long weekend) for ~140 MB.
+  # Events are far bigger, so they get a smaller buffer below (5,000 events ~85 MB).
+  # Worst case, both buffers full: ~330 MB total (~500 MB allowing 50% for GC slack): well inside a 1 GB ceiling.
+  # When a buffer is full the OLDEST entries are dropped. A restart or reboot during an outage loses the buffer.
+  metric_buffer_limit = 200000
   logfile = "{{AGENT_DIR}}/telegraf.log"
   logfile_rotation_max_size = "5MB"
   logfile_rotation_max_archives = 3
@@ -25,11 +32,13 @@
   organization = "msp"
   bucket = "cust_{{CUSTOMER}}"
   namedrop = ["win_eventlog"]
+  metric_buffer_limit = 200000
 
 [[outputs.loki]]
   domain = "https://{{INGEST_HOST}}"
   endpoint = "/loki/api/v1/push"
   namepass = ["win_eventlog"]
+  metric_buffer_limit = 5000     # events are ~17 KB each in memory; see the budget note in [agent]
   # The gateway maps this key to exactly one tenant. (Option name verified against Telegraf 1.40.2.)
   http_headers = {"Authorization" = "Bearer {{LOKI_PUSH_KEY}}"}
 
