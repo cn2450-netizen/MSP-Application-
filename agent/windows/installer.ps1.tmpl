@@ -34,6 +34,20 @@ $BitlockerB64   = '@@BITLOCKER_B64@@'
 
 function Write-Step([string] $Message) { Write-Host "[MSP Agent] $Message" }
 
+# Run a native program without tripping $ErrorActionPreference='Stop'. Windows PowerShell 5.1 turns ANY text a
+# program writes to stderr (even a harmless warning) into a terminating error; judge success by exit code instead.
+function Invoke-Native([string] $Exe, [string[]] $Arguments) {
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $lines = & $Exe @Arguments 2>&1 | ForEach-Object { "$_" }
+        $code  = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previous
+    }
+    return [pscustomobject]@{ ExitCode = $code; Output = ($lines -join "`n") }
+}
+
 $identity  = [Security.Principal.WindowsIdentity]::GetCurrent()
 $principal = New-Object Security.Principal.WindowsPrincipal($identity)
 if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
@@ -53,8 +67,8 @@ try {
     if ($Uninstall) {
         if ($existing) {
             if ($existing.Status -ne 'Stopped') { Stop-Service -Name $ServiceName -Force }
-            if (Test-Path $exePath) { & $exePath service uninstall --service-name $ServiceName | Out-Null }
-            else { & sc.exe delete $ServiceName | Out-Null }
+            if (Test-Path $exePath) { [void](Invoke-Native $exePath @('service', 'uninstall', '--service-name', $ServiceName)) }
+            else { [void](Invoke-Native 'sc.exe' @('delete', $ServiceName)) }
         }
         if (Test-Path $InstallDir) { Remove-Item -Recurse -Force -Path $InstallDir }
         Write-Step 'Uninstalled.'
@@ -95,7 +109,7 @@ try {
         if ($existing) {
             Write-Step 'Existing install found; stopping it for upgrade.'
             if ($existing.Status -ne 'Stopped') { Stop-Service -Name $ServiceName -Force }
-            if (Test-Path $exePath) { & $exePath service uninstall --service-name $ServiceName | Out-Null }
+            if (Test-Path $exePath) { [void](Invoke-Native $exePath @('service', 'uninstall', '--service-name', $ServiceName)) }
         }
 
         # --- 3. Files, config, permissions ---------------------------------------
@@ -108,20 +122,21 @@ try {
         [IO.File]::WriteAllText($confPath, $conf, (New-Object Text.UTF8Encoding($false)))   # no BOM
 
         # SYSTEM + Administrators only, by well-known SID so it works on any Windows language.
-        & icacls.exe $InstallDir /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' | Out-Null
+        $acl = Invoke-Native 'icacls.exe' @($InstallDir, '/inheritance:r', '/grant:r', '*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F')
+        if ($acl.ExitCode -ne 0) { throw "Could not restrict permissions on ${InstallDir}: $($acl.Output)" }
 
         # --- 4. Validate the config before installing ----------------------------
         Write-Step 'Checking configuration...'
-        $check = & $exePath --config $confPath --test 2>&1 | Out-String
-        if ($check -match 'E! loading config|invalid TOML|failed to load') {
-            throw "Telegraf rejected the generated configuration:`n$check"
+        $check = Invoke-Native $exePath @('--config', $confPath, '--test')
+        if ($check.ExitCode -ne 0 -or $check.Output -match 'E! loading config|invalid TOML|failed to load') {
+            throw "Telegraf rejected the generated configuration (exit $($check.ExitCode)):`n$($check.Output)"
         }
 
         # --- 5. Install and start the service ------------------------------------
         Write-Step 'Installing the service...'
-        & $exePath service install --config $confPath --service-name $ServiceName `
-            --service-display-name 'MSP Monitoring Agent' --service-auto-restart --service-restart-delay 30s
-        if ($LASTEXITCODE -ne 0) { throw "Service install failed (exit code $LASTEXITCODE)." }
+        $install = Invoke-Native $exePath @('service', 'install', '--config', $confPath, '--service-name', $ServiceName,
+            '--service-display-name', 'MSP Monitoring Agent', '--service-auto-restart', '--service-restart-delay', '30s')
+        if ($install.ExitCode -ne 0) { throw "Service install failed (exit $($install.ExitCode)):`n$($install.Output)" }
         Start-Service -Name $ServiceName
         Write-Step "Service started. Waiting up to 60s to confirm data is being delivered..."
 
