@@ -1,5 +1,9 @@
-# Windows agent config template. install-agent.ps1 fills the {{PLACEHOLDERS}}.
+# Windows agent config template (ASCII only; keep it that way).
+# scripts/build-agent-installer.sh fills customer values; the installer fills {{AGENT_DIR}} at install time.
 # One agent ships metrics -> InfluxDB (customer bucket) and event logs -> Loki (customer tenant).
+#
+# TOML note: never put a Windows path (backslashes) inside a "..." string; every backslash is an escape.
+# Paths here use forward slashes, which Windows and PowerShell accept.
 
 [global_tags]
   customer = "{{CUSTOMER}}"        # convenience label only; isolation is enforced server-side
@@ -9,8 +13,11 @@
   flush_interval = "30s"
   round_interval = true
   omit_hostname = false
+  logfile = "{{AGENT_DIR}}/telegraf.log"
+  logfile_rotation_max_size = "5MB"
+  logfile_rotation_max_archives = 3
 
-# ── Outputs ──────────────────────────────────────────────────────────────────
+# -- Outputs -----------------------------------------------------------------
 
 [[outputs.influxdb_v2]]
   urls = ["https://{{INGEST_HOST}}/influx"]
@@ -23,10 +30,10 @@
   domain = "https://{{INGEST_HOST}}"
   endpoint = "/loki/api/v1/push"
   namepass = ["win_eventlog"]
-  [outputs.loki.headers]
-    Authorization = "Bearer {{LOKI_PUSH_KEY}}"
+  # The gateway maps this key to exactly one tenant. (Option name verified against Telegraf 1.40.2.)
+  http_headers = {"Authorization" = "Bearer {{LOKI_PUSH_KEY}}"}
 
-# ── Core health ──────────────────────────────────────────────────────────────
+# -- Core health -------------------------------------------------------------
 
 [[inputs.cpu]]
   percpu = false
@@ -51,14 +58,15 @@
     "LanmanServer", "LanmanWorkstation", "MpsSvc", "WinDefend", "wuauserv", "BITS",
   ]
 
-# BitLocker (protection status, encryption %, locked) — see bitlocker.ps1
+# BitLocker (protection status, encryption %, locked) - see bitlocker.ps1.
+# Array syntax (the string form is deprecated since Telegraf 1.39 and removed in 1.45). Forward slashes only.
 [[inputs.exec]]
-  commands = ["powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{{AGENT_DIR}}\\bitlocker.ps1\""]
+  commands = [["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "{{AGENT_DIR}}/bitlocker.ps1"]]
   data_format = "influx"
   timeout = "20s"
   interval = "300s"
 
-# ── Logs (Warning and above; deliberately NOT the Security log) ──────────────
+# -- Logs (Warning and above; deliberately NOT the Security log) --------------
 
 [[inputs.win_eventlog]]
   eventlog_name = "System"

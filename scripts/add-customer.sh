@@ -114,3 +114,4 @@ EOF
 )
 echo
 echo "Done. Agent credentials: $cred  (mode 600 — deliver securely, then delete or vault it)"
+scripts/build-agent-installer.sh "$slug" || echo "WARNING: could not build the Windows installer; run scripts/build-agent-installer.sh ${slug} to retry" >&2
