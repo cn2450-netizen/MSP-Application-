@@ -91,7 +91,7 @@ if [[ -n "${MESH_HOST:-}" && -s secrets/meshcentral_oidc_secret ]]; then
   mprov="$(ak_req GET 'providers/oauth2/?name=MeshCentral' | jq -r '.results[0].pk // empty')"
   if [[ -n "$mprov" ]]; then ak_req PATCH "providers/oauth2/${mprov}/" "$mesh_json" >/dev/null
   else mprov="$(ak_req POST providers/oauth2/ "$mesh_json" | jq -r '.pk')"; fi
-  mapp_json="$(jq -n --argjson p "$mprov" --arg url "https://${MESH_HOST}/" \
+  mapp_json="$(jq -n --argjson p "$mprov" --arg url "https://${MESH_HOST}/auth-oidc" \
     '{name:"Remote Access",slug:"meshcentral",provider:$p,meta_launch_url:$url,group:"Remote",open_in_new_tab:false}')"
   if ak_req GET 'core/applications/meshcentral/' >/dev/null 2>&1; then ak_req PATCH core/applications/meshcentral/ "$mapp_json" >/dev/null
   else ak_req POST core/applications/ "$mapp_json" >/dev/null; fi
