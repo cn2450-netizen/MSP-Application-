@@ -2,7 +2,7 @@
 # Helpers for talking to authentik's API from scripts on the Docker host. Source this file.
 # Needs: cwd = repo root, .env loaded (BIND_ADDR, AUTHENTIK_PORT), jq, curl, docker compose.
 #
-# No long-lived API token exists: ak_login mints a 1-hour token for akadmin via `ak shell`
+# No long-lived API token exists: ak_login mints a 1-hour token for the msp-automation service account via `ak shell`
 # and ak_logout (run automatically on exit) deletes it again.
 
 AK_API="http://${BIND_ADDR:-127.0.0.1}:${AUTHENTIK_PORT:-9000}/api/v3"
@@ -20,8 +20,14 @@ ak_login() {
   AK_KEY="$(docker compose exec -T authentik-server ak shell -c "
 from datetime import timedelta
 from django.utils import timezone
-from authentik.core.models import Token, User, TokenIntents
-u = User.objects.get(username='akadmin')
+from authentik.core.models import Token, User, UserTypes, Group, TokenIntents
+# Scripts act as their own service account (no password, never logs in interactively), so audit
+# events show automation separately from people and no human admin has to stay enabled.
+u, new = User.objects.get_or_create(username='msp-automation', defaults=dict(
+    name='MSP automation scripts', type=UserTypes.INTERNAL_SERVICE_ACCOUNT, path='goauthentik.io/service-accounts'))
+if new:
+    u.set_unusable_password(); u.save()
+Group.objects.get(name='authentik Admins').users.add(u)
 t, _ = Token.objects.update_or_create(identifier='${AK_TOKEN_ID}', defaults=dict(
     user=u, intent=TokenIntents.INTENT_API, expiring=True,
     expires=timezone.now() + timedelta(hours=1), description='temporary, created by a setup script'))
