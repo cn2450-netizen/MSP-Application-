@@ -100,6 +100,16 @@ MEM_TREND = ('from(bucket: v.defaultBucket) |> range(start: v.timeRangeStart, st
              f'|> filter(fn: (r) => r._measurement == "mem" and r._field == "used_percent" and {HOST}) '
              '|> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)')
 
+DISK_PCT_TREND = ('from(bucket: v.defaultBucket) |> range(start: v.timeRangeStart, stop: v.timeRangeStop) '
+                  f'|> filter(fn: (r) => r._measurement == "volume" and r._field == "used_percent" and {HOST}) '
+                  '|> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false) '
+                  '|> keep(columns: ["_time", "_value", "host", "name"])')
+
+DISK_FREE_TREND = ('from(bucket: v.defaultBucket) |> range(start: v.timeRangeStart, stop: v.timeRangeStop) '
+                   f'|> filter(fn: (r) => r._measurement == "volume" and r._field == "free_bytes" and {HOST}) '
+                   '|> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false) '
+                   '|> keep(columns: ["_time", "_value", "host", "name"])')
+
 # ---- panels ----------------------------------------------------------------------------------------------
 
 panels = []
@@ -149,8 +159,14 @@ trend_cpu = base(10, "CPU used % over time", "timeseries", 0, 35, 12, 8, [flux(C
 trend_cpu["fieldConfig"]["defaults"] = {"unit": "percent", "min": 0, "max": 100}
 trend_mem = base(11, "Memory used % over time", "timeseries", 12, 35, 12, 8, [flux(MEM_TREND)])
 trend_mem["fieldConfig"]["defaults"] = {"unit": "percent", "min": 0, "max": 100}
+DRIVE_LINE = "${__field.labels.host}  ${__field.labels.name}"
+trend_disk = base(12, "Disk used % over time", "timeseries", 0, 43, 12, 8, [flux(DISK_PCT_TREND)])
+trend_disk["fieldConfig"]["defaults"] = {"unit": "percent", "min": 0, "max": 100, "displayName": DRIVE_LINE}
+trend_free = base(13, "Disk free space over time", "timeseries", 12, 43, 12, 8, [flux(DISK_FREE_TREND)])
+trend_free["fieldConfig"]["defaults"] = {"unit": "bytes", "min": 0, "displayName": DRIVE_LINE}
 panels.append({"id": 9, "type": "row", "title": "Trends", "collapsed": True,
-               "gridPos": {"x": 0, "y": 34, "w": 24, "h": 1}, "panels": [trend_cpu, trend_mem]})
+               "gridPos": {"x": 0, "y": 34, "w": 24, "h": 1},
+               "panels": [trend_cpu, trend_mem, trend_disk, trend_free]})
 
 dashboard = {
     "uid": "windows-overview", "title": "Windows Overview", "tags": ["msp", "windows"],
