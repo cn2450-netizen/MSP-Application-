@@ -66,6 +66,22 @@
   timeout = "20s"
   interval = "300s"
 
+# Drive letter + volume label, size and free space (adds the label Telegraf's disk input lacks) - see volumes.ps1
+[[inputs.exec]]
+  commands = [["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "{{AGENT_DIR}}/volumes.ps1"]]
+  data_format = "influx"
+  timeout = "30s"
+  interval = "60s"
+
+# Windows patch history (Windows Update history incl. failures + installed updates) - see patches.ps1.
+# Every 15 min: Telegraf aligns each collector to the clock, so a new agent's first patch data can take up to
+# one interval to appear.
+[[inputs.exec]]
+  commands = [["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "{{AGENT_DIR}}/patches.ps1"]]
+  data_format = "influx"
+  timeout = "120s"
+  interval = "15m"
+
 # -- Logs (Warning and above; deliberately NOT the Security log) --------------
 
 [[inputs.win_eventlog]]

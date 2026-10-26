@@ -35,16 +35,21 @@ conf = open("agent/windows/telegraf.conf.tmpl", encoding="utf-8").read()
 for k, v in {"CUSTOMER": slug, "INGEST_HOST": host,
              "INFLUX_WRITE_TOKEN": vals["influx WRITE tk"], "LOKI_PUSH_KEY": vals["loki push key"]}.items():
     conf = conf.replace("{{" + k + "}}", v)   # {{AGENT_DIR}} is filled in on the PC at install time
-bl = open("agent/windows/bitlocker.ps1", "rb").read()
-for name, data in (("telegraf.conf.tmpl", conf.encode()), ("bitlocker.ps1", bl)):
+HELPERS = ["bitlocker.ps1", "volumes.ps1", "patches.ps1"]
+scripts = {n: open("agent/windows/" + n, "rb").read() for n in HELPERS}
+for name, data in [("telegraf.conf.tmpl", conf.encode())] + list(scripts.items()):
     try: data.decode("ascii")
     except UnicodeDecodeError: sys.exit(f"{name} must be ASCII only (Windows PowerShell 5.1 mis-reads UTF-8 without a BOM)")
+# Every script the config calls must be shipped, or the agent would log errors on every PC.
+missing = [n for n in re.findall(r"\{\{AGENT_DIR\}\}/([A-Za-z0-9_.-]+\.ps1)", conf) if n not in scripts]
+if missing: sys.exit(f"config references scripts that are not shipped: {missing}")
+scripts_block = "\n".join(f"    '{n}' = '{base64.b64encode(d).decode()}'" for n, d in scripts.items())
 
 tpl = open("agent/windows/installer.ps1.tmpl", encoding="utf-8").read()
 for k, v in {"CUSTOMER": slug, "TELEGRAF_URL": os.environ["TELEGRAF_URL"],
              "TELEGRAF_SHA256": os.environ["TELEGRAF_SHA256"],
              "CONF_B64": base64.b64encode(conf.encode()).decode(),
-             "BITLOCKER_B64": base64.b64encode(bl).decode()}.items():
+             "SCRIPTS": scripts_block}.items():
     tpl = tpl.replace("@@" + k + "@@", v)
 left = re.findall(r"@@[A-Z0-9_]+@@", tpl)
 if left: sys.exit(f"unfilled placeholders: {left}")

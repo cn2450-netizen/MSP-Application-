@@ -6,7 +6,7 @@
     "windows"
   ],
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "1m",
   "time": {
     "from": "now-6h",
@@ -33,13 +33,13 @@
   "panels": [
     {
       "id": 1,
-      "title": "CPU used %",
-      "type": "timeseries",
+      "title": "CPU used (5 min average)",
+      "type": "gauge",
       "gridPos": {
         "x": 0,
         "y": 0,
-        "w": 12,
-        "h": 8
+        "w": 6,
+        "h": 7
       },
       "datasource": {
         "type": "influxdb",
@@ -48,86 +48,96 @@
       "targets": [
         {
           "refId": "A",
-          "query": "from(bucket: v.defaultBucket) |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"cpu\" and r._field == \"usage_idle\" and r.cpu == \"cpu-total\" and r.host =~ /^${host:regex}$/) |> map(fn: (r) => ({r with _value: 100.0 - r._value})) |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
+          "query": "from(bucket: v.defaultBucket) |> range(start: -5m) |> filter(fn: (r) => r._measurement == \"cpu\" and r._field == \"usage_idle\" and r.cpu == \"cpu-total\" and r.host =~ /^${host:regex}$/) |> map(fn: (r) => ({r with _value: 100.0 - r._value})) |> mean() |> keep(columns: [\"host\", \"_value\"])",
           "datasource": {
             "type": "influxdb",
             "uid": "influx"
           }
         }
       ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percent",
-          "min": 0,
-          "max": 100
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
         },
-        "overrides": []
+        "showThresholdMarkers": true,
+        "showThresholdLabels": false,
+        "orientation": "auto"
       },
-      "options": {}
-    },
-    {
-      "id": 2,
-      "title": "Memory used %",
-      "type": "timeseries",
-      "gridPos": {
-        "x": 12,
-        "y": 0,
-        "w": 12,
-        "h": 8
-      },
-      "datasource": {
-        "type": "influxdb",
-        "uid": "influx"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "query": "from(bucket: v.defaultBucket) |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"mem\" and r._field == \"used_percent\" and r.host =~ /^${host:regex}$/) |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
-          "datasource": {
-            "type": "influxdb",
-            "uid": "influx"
-          }
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percent",
-          "min": 0,
-          "max": 100
-        },
-        "overrides": []
-      },
-      "options": {}
-    },
-    {
-      "id": 3,
-      "title": "Disk used %",
-      "type": "bargauge",
-      "gridPos": {
-        "x": 0,
-        "y": 8,
-        "w": 12,
-        "h": 8
-      },
-      "datasource": {
-        "type": "influxdb",
-        "uid": "influx"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "query": "from(bucket: v.defaultBucket) |> range(start: -15m) |> filter(fn: (r) => r._measurement == \"disk\" and r._field == \"used_percent\" and r.host =~ /^${host:regex}$/) |> last() |> keep(columns: [\"host\", \"path\", \"_value\"])",
-          "datasource": {
-            "type": "influxdb",
-            "uid": "influx"
-          }
-        }
-      ],
       "fieldConfig": {
         "defaults": {
           "unit": "percent",
           "min": 0,
           "max": 100,
+          "decimals": 0,
+          "displayName": "${__field.labels.host}",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 90
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "title": "Memory used",
+      "type": "gauge",
+      "gridPos": {
+        "x": 6,
+        "y": 0,
+        "w": 6,
+        "h": 7
+      },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influx"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: v.defaultBucket) |> range(start: -5m) |> filter(fn: (r) => r._measurement == \"mem\" and r._field == \"used_percent\" and r.host =~ /^${host:regex}$/) |> last() |> keep(columns: [\"host\", \"_value\"])",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influx"
+          }
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdMarkers": true,
+        "showThresholdLabels": false,
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "decimals": 0,
+          "displayName": "${__field.labels.host}",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -147,18 +157,307 @@
           }
         },
         "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "title": "Disk used",
+      "type": "gauge",
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 7
       },
-      "options": {}
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influx"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: v.defaultBucket) |> range(start: -15m) |> filter(fn: (r) => r._measurement == \"volume\" and r._field == \"used_percent\" and r.host =~ /^${host:regex}$/) |> last() |> keep(columns: [\"host\", \"name\", \"_value\"])",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influx"
+          }
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdMarkers": true,
+        "showThresholdLabels": false,
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "decimals": 0,
+          "displayName": "${__field.labels.host}  ${__field.labels.name}",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 80
+              },
+              {
+                "color": "red",
+                "value": 90
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
     },
     {
       "id": 4,
-      "title": "Auto-start services NOT running",
+      "title": "Disk usage",
+      "type": "table",
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influx"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: v.defaultBucket) |> range(start: -15m) |> filter(fn: (r) => r._measurement == \"volume\" and r.host =~ /^${host:regex}$/ and (r._field == \"size_bytes\" or r._field == \"free_bytes\" or r._field == \"used_percent\")) |> last() |> drop(columns: [\"_time\", \"_start\", \"_stop\"]) |> pivot(rowKey: [\"host\", \"name\"], columnKey: [\"_field\"], valueColumn: \"_value\") |> map(fn: (r) => ({r with used_bytes: r.size_bytes - r.free_bytes})) |> group() |> keep(columns: [\"host\", \"name\", \"size_bytes\", \"used_bytes\", \"free_bytes\", \"used_percent\"]) |> rename(columns: {name: \"volume\"})",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influx"
+          }
+        }
+      ],
+      "options": {},
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "size_bytes"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "used_bytes"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "free_bytes"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "used_percent"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "gauge",
+                  "mode": "gradient"
+                }
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "max",
+                "value": 100
+              },
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 80
+                    },
+                    {
+                      "color": "red",
+                      "value": 90
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 5,
+      "title": "BitLocker",
       "type": "table",
       "gridPos": {
         "x": 12,
-        "y": 8,
+        "y": 7,
         "w": 12,
         "h": 8
+      },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influx"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: v.defaultBucket) |> range(start: -1h) |> filter(fn: (r) => r._measurement == \"bitlocker\" and r.host =~ /^${host:regex}$/ and (r._field == \"protection_status\" or r._field == \"encryption_percentage\" or r._field == \"volume_status\")) |> last() |> drop(columns: [\"_time\", \"_start\", \"_stop\"]) |> map(fn: (r) => ({r with name: if exists r.name then r.name else r.volume + \":\"})) |> pivot(rowKey: [\"host\", \"name\"], columnKey: [\"_field\"], valueColumn: \"_value\") |> group() |> keep(columns: [\"host\", \"name\", \"protection_status\", \"encryption_percentage\", \"volume_status\"]) |> rename(columns: {name: \"volume\"})",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influx"
+          }
+        }
+      ],
+      "options": {},
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "protection_status"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "OFF",
+                        "color": "red",
+                        "index": 0
+                      },
+                      "1": {
+                        "text": "On",
+                        "color": "green",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "encryption_percentage"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "gauge",
+                  "mode": "gradient"
+                }
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "max",
+                "value": 100
+              },
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 80
+                    },
+                    {
+                      "color": "red",
+                      "value": 90
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 6,
+      "title": "Auto-start services NOT running",
+      "type": "table",
+      "gridPos": {
+        "x": 0,
+        "y": 15,
+        "w": 12,
+        "h": 9
       },
       "datasource": {
         "type": "influxdb",
@@ -174,21 +473,21 @@
           }
         }
       ],
+      "options": {},
       "fieldConfig": {
         "defaults": {},
         "overrides": []
-      },
-      "options": {}
+      }
     },
     {
-      "id": 5,
-      "title": "BitLocker",
+      "id": 7,
+      "title": "Windows update history (last 90 days, newest first)",
       "type": "table",
       "gridPos": {
-        "x": 0,
-        "y": 16,
+        "x": 12,
+        "y": 15,
         "w": 12,
-        "h": 8
+        "h": 9
       },
       "datasource": {
         "type": "influxdb",
@@ -197,21 +496,62 @@
       "targets": [
         {
           "refId": "A",
-          "query": "from(bucket: v.defaultBucket) |> range(start: -1h) |> filter(fn: (r) => r._measurement == \"bitlocker\" and r.host =~ /^${host:regex}$/ and (r._field == \"protection_status\" or r._field == \"encryption_percentage\")) |> last() |> pivot(rowKey: [\"host\", \"volume\"], columnKey: [\"_field\"], valueColumn: \"_value\") |> keep(columns: [\"host\", \"volume\", \"protection_status\", \"encryption_percentage\"])",
+          "query": "from(bucket: v.defaultBucket) |> range(start: -90d) |> filter(fn: (r) => r._measurement == \"patch_history\" and r._field == \"title\" and r.host =~ /^${host:regex}$/) |> group(columns: [\"host\", \"kb\", \"result\", \"operation\", \"date\", \"source\"]) |> last() |> group() |> sort(columns: [\"date\"], desc: true) |> keep(columns: [\"host\", \"date\", \"kb\", \"result\", \"operation\", \"source\", \"_value\"]) |> rename(columns: {_value: \"title\"}) |> limit(n: 100)",
           "datasource": {
             "type": "influxdb",
             "uid": "influx"
           }
         }
       ],
+      "options": {},
       "fieldConfig": {
         "defaults": {},
-        "overrides": []
-      },
-      "options": {}
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "result"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "Failed": {
+                        "color": "red",
+                        "index": 0
+                      },
+                      "Aborted": {
+                        "color": "red",
+                        "index": 1
+                      },
+                      "SucceededWithErrors": {
+                        "color": "orange",
+                        "index": 2
+                      },
+                      "Succeeded": {
+                        "color": "green",
+                        "index": 3
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          }
+        ]
+      }
     },
     {
-      "id": 6,
+      "id": 8,
       "title": "Warnings / errors (System + Application)",
       "type": "logs",
       "gridPos": {
@@ -234,11 +574,93 @@
           }
         }
       ],
+      "options": {},
       "fieldConfig": {
         "defaults": {},
         "overrides": []
+      }
+    },
+    {
+      "id": 9,
+      "type": "row",
+      "title": "Trends",
+      "collapsed": true,
+      "gridPos": {
+        "x": 0,
+        "y": 34,
+        "w": 24,
+        "h": 1
       },
-      "options": {}
+      "panels": [
+        {
+          "id": 10,
+          "title": "CPU used % over time",
+          "type": "timeseries",
+          "gridPos": {
+            "x": 0,
+            "y": 35,
+            "w": 12,
+            "h": 8
+          },
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influx"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "query": "from(bucket: v.defaultBucket) |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"cpu\" and r._field == \"usage_idle\" and r.cpu == \"cpu-total\" and r.host =~ /^${host:regex}$/) |> map(fn: (r) => ({r with _value: 100.0 - r._value})) |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
+              "datasource": {
+                "type": "influxdb",
+                "uid": "influx"
+              }
+            }
+          ],
+          "options": {},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 11,
+          "title": "Memory used % over time",
+          "type": "timeseries",
+          "gridPos": {
+            "x": 12,
+            "y": 35,
+            "w": 12,
+            "h": 8
+          },
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influx"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "query": "from(bucket: v.defaultBucket) |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"mem\" and r._field == \"used_percent\" and r.host =~ /^${host:regex}$/) |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
+              "datasource": {
+                "type": "influxdb",
+                "uid": "influx"
+              }
+            }
+          ],
+          "options": {},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100
+            },
+            "overrides": []
+          }
+        }
+      ]
     }
   ]
 }

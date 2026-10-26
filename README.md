@@ -101,6 +101,10 @@ scripts/add-customer.sh acme "Acme Corp" 90     # 90 = metric retention in days
 
 Creates their bucket, tokens, Loki key, Grafana org + datasources + starter dashboard, and writes agent credentials to `generated/credentials/acme.txt` (mode 600). Then create the `tech-acme` and `cust-acme-users` groups in authentik.
 
+### Change the dashboard
+
+Edit `dashboards/build_windows_overview.py` (house style: every percentage is a 0-100 gauge), run it to regenerate `windows-overview.json`, then `scripts/update-dashboards.sh` pushes it to every customer org.
+
 ### Install the Windows agent
 
 Download `telegraf.exe` from the vendor's release page and note its published SHA256. On the customer PC (elevated PowerShell), with `telegraf.exe` next to the scripts in `agent/windows/`:

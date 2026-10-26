@@ -30,7 +30,9 @@ $TelegrafUrl    = '@@TELEGRAF_URL@@'
 $TelegrafSha256 = '@@TELEGRAF_SHA256@@'
 $ServiceName    = 'MSPAgent'
 $ConfB64        = '@@CONF_B64@@'
-$BitlockerB64   = '@@BITLOCKER_B64@@'
+$HelperScripts  = @{
+@@SCRIPTS@@
+}
 
 function Write-Step([string] $Message) { Write-Host "[MSP Agent] $Message" }
 
@@ -115,7 +117,9 @@ try {
         # --- 3. Files, config, permissions ---------------------------------------
         New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
         Copy-Item -Path $newExe.FullName -Destination $exePath -Force
-        [IO.File]::WriteAllBytes((Join-Path $InstallDir 'bitlocker.ps1'), [Convert]::FromBase64String($BitlockerB64))
+        foreach ($name in $HelperScripts.Keys) {
+            [IO.File]::WriteAllBytes((Join-Path $InstallDir $name), [Convert]::FromBase64String($HelperScripts[$name]))
+        }
 
         $dirForToml = $InstallDir.Replace('\', '/')
         $conf = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($ConfB64)).Replace('{{AGENT_DIR}}', $dirForToml)
