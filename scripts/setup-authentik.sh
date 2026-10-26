@@ -56,7 +56,8 @@ provider_json="$(jq -n --arg af "$auth_flow" --arg inf "$inv_flow" --arg key "$k
   '{name:"Grafana",authorization_flow:$af,invalidation_flow:$inf,client_type:"confidential",
     client_id:"grafana",client_secret:$secret,
     redirect_uris:[{matching_mode:"strict",url:$redirect}],
-    signing_key:$key,property_mappings:$maps,issuer_mode:"per_provider"}')"
+    signing_key:$key,property_mappings:$maps,issuer_mode:"per_provider",
+    grant_types:["authorization_code","refresh_token"]}')"   # empty (the default) rejects every login with invalid_request
 prov="$(ak_req GET 'providers/oauth2/?name=Grafana' | jq -r '.results[0].pk // empty')"
 if [[ -n "$prov" ]]; then
   ak_req PATCH "providers/oauth2/${prov}/" "$provider_json" >/dev/null
