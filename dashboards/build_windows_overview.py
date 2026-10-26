@@ -60,12 +60,12 @@ DISK_PCT = ('from(bucket: v.defaultBucket) |> range(start: -15m) '
             '|> last() |> keep(columns: ["host", "name", "_value"])')
 
 DISK_TABLE = ('from(bucket: v.defaultBucket) |> range(start: -15m) '
-              f'|> filter(fn: (r) => r._measurement == "volume" and {HOST} and (r._field == "size_bytes" or r._field == "free_bytes" or r._field == "used_percent")) '
+              f'|> filter(fn: (r) => r._measurement == "volume" and {HOST} and (r._field == "size_bytes" or r._field == "free_bytes")) '
               '|> last() |> drop(columns: ["_time", "_start", "_stop"]) '
               '|> pivot(rowKey: ["host", "name"], columnKey: ["_field"], valueColumn: "_value") '
               '|> map(fn: (r) => ({r with used_bytes: r.size_bytes - r.free_bytes})) '
               '|> group() '
-              '|> keep(columns: ["host", "name", "size_bytes", "used_bytes", "free_bytes", "used_percent"]) '
+              '|> keep(columns: ["host", "name", "size_bytes", "used_bytes", "free_bytes"]) '
               '|> rename(columns: {name: "volume"})')
 
 BITLOCKER = ('from(bucket: v.defaultBucket) |> range(start: -1h) '
@@ -108,11 +108,13 @@ panels.append(gauge(1, "CPU used (5 min average)", 0, 0, 6, 7, CPU, "${__field.l
 panels.append(gauge(2, "Memory used", 6, 0, 6, 7, MEM, "${__field.labels.host}"))
 panels.append(gauge(3, "Disk used", 12, 0, 12, 7, DISK_PCT, "${__field.labels.host}  ${__field.labels.name}"))
 
-disk = base(4, "Disk usage", "table", 0, 7, 12, 8, [flux(DISK_TABLE)])
-disk["fieldConfig"]["overrides"] = [
-    {"matcher": {"id": "byName", "options": n}, "properties": [{"id": "unit", "value": "bytes"}]}
-    for n in ("size_bytes", "used_bytes", "free_bytes")
-] + [{"matcher": {"id": "byName", "options": "used_percent"}, "properties": gauge_cell()}]
+# The percentage is already shown by the "Disk used" gauges, so this table carries only what they lack: capacity.
+disk = base(4, "Disk capacity", "table", 0, 7, 12, 8, [flux(DISK_TABLE)])
+disk["fieldConfig"]["defaults"] = {"unit": "bytes"}
+disk["transformations"] = [{"id": "organize", "options": {
+    "excludeByName": {},
+    "indexByName": {"host": 0, "volume": 1, "size_bytes": 2, "used_bytes": 3, "free_bytes": 4},
+    "renameByName": {"host": "Host", "volume": "Volume", "size_bytes": "Size", "used_bytes": "Used", "free_bytes": "Free"}}}]
 panels.append(disk)
 
 bl = base(5, "BitLocker", "table", 12, 7, 12, 8, [flux(BITLOCKER)])
