@@ -2,26 +2,28 @@
 # Build the one-file Windows agent installer for a customer that already exists (add-customer.sh calls
 # this automatically; run it by hand to rebuild after changing the template or pinned Telegraf version).
 #
-# usage: scripts/build-agent-installer.sh <slug>
-# output: generated/agents/<slug>/install-agent-<slug>.ps1   (mode 600: it embeds the customer's write-only keys)
+# usage: scripts/build-agent-installer.sh <customer> <site>
+# output: generated/agents/<customer>/<site>/install-agent-<customer>-<site>.ps1   (mode 600: embeds that site's write-only keys)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-slug="${1:?usage: build-agent-installer.sh <slug>}"
-[[ "$slug" =~ ^[a-z0-9][a-z0-9-]{1,30}$ ]] || { echo "invalid slug"; exit 1; }
-cred="generated/credentials/${slug}.txt"
-[[ -f "$cred" ]] || { echo "no credentials file for '${slug}' ($cred) - onboard the customer first"; exit 1; }
+slug="${1:?usage: build-agent-installer.sh <customer> <site>}"
+site="${2:?site required}"
+[[ "$slug" =~ ^[a-z0-9][a-z0-9-]{1,30}$ ]] || { echo "invalid customer slug"; exit 1; }
+[[ "$site" =~ ^[a-z0-9][a-z0-9-]{0,30}$ ]] || { echo "invalid site slug"; exit 1; }
+cred="generated/credentials/${slug}/${site}.txt"
+[[ -f "$cred" ]] || { echo "no credentials for ${slug}/${site} ($cred) - run scripts/add-site.sh ${slug} ${site}"; exit 1; }
 set -a; source agent/windows/version.env; source .env; set +a   # INGEST_HOST comes from .env, not from the credentials file (it can go stale)
 
-out_dir="generated/agents/${slug}"
+out_dir="generated/agents/${slug}/${site}"
 mkdir -p "$out_dir"
-out="${out_dir}/install-agent-${slug}.ps1"
+out="${out_dir}/install-agent-${slug}-${site}.ps1"
 
-SLUG="$slug" CRED="$cred" INGEST_HOST="${INGEST_HOST:?INGEST_HOST not set in .env}" OUT="$out" TELEGRAF_URL="$TELEGRAF_URL" TELEGRAF_SHA256="$TELEGRAF_SHA256" \
+SLUG="$slug" SITE="$site" CRED="$cred" INGEST_HOST="${INGEST_HOST:?INGEST_HOST not set in .env}" OUT="$out" TELEGRAF_URL="$TELEGRAF_URL" TELEGRAF_SHA256="$TELEGRAF_SHA256" \
 python3 - <<'PY'
 import base64, os, re, sys
 
-slug, cred, out = os.environ["SLUG"], os.environ["CRED"], os.environ["OUT"]
+slug, site, cred, out = os.environ["SLUG"], os.environ["SITE"], os.environ["CRED"], os.environ["OUT"]
 vals = {}
 for line in open(cred, encoding="utf-8"):
     m = re.match(r"^(influx WRITE tk|loki push key):\s*(\S+)\s*$", line)
@@ -32,7 +34,7 @@ host = os.environ["INGEST_HOST"].strip().rstrip("/")
 if not re.fullmatch(r"[A-Za-z0-9.-]+(:[0-9]+)?", host): sys.exit(f"INGEST_HOST looks wrong: {host!r}")
 
 conf = open("agent/windows/telegraf.conf.tmpl", encoding="utf-8").read()
-for k, v in {"CUSTOMER": slug, "INGEST_HOST": host,
+for k, v in {"CUSTOMER": slug, "SITE": site, "INGEST_HOST": host,
              "INFLUX_WRITE_TOKEN": vals["influx WRITE tk"], "LOKI_PUSH_KEY": vals["loki push key"]}.items():
     conf = conf.replace("{{" + k + "}}", v)   # {{AGENT_DIR}} is filled in on the PC at install time
 HELPERS = ["bitlocker.ps1", "volumes.ps1", "patches.ps1"]
@@ -46,7 +48,7 @@ if missing: sys.exit(f"config references scripts that are not shipped: {missing}
 scripts_block = "\n".join(f"    '{n}' = '{base64.b64encode(d).decode()}'" for n, d in scripts.items())
 
 tpl = open("agent/windows/installer.ps1.tmpl", encoding="utf-8").read()
-for k, v in {"CUSTOMER": slug, "TELEGRAF_URL": os.environ["TELEGRAF_URL"],
+for k, v in {"CUSTOMER": slug, "SITE": site, "TELEGRAF_URL": os.environ["TELEGRAF_URL"],
              "TELEGRAF_SHA256": os.environ["TELEGRAF_SHA256"],
              "CONF_B64": base64.b64encode(conf.encode()).decode(),
              "SCRIPTS": scripts_block}.items():
@@ -61,4 +63,4 @@ print(out)
 PY
 chmod 600 "$out"
 echo "Built ${out}"
-echo "Deliver securely; it contains this customer's write-only ingest credentials. Run it elevated on the PC."
+echo "Deliver securely; it contains this site's write-only ingest credentials. Run it elevated on the PC."

@@ -12,12 +12,12 @@ pass=0; fail=0
 check() { # check <name> <expected> <actual>
   if [[ "$2" == "$3" ]]; then echo "PASS  $1"; pass=$((pass+1)); else echo "FAIL  $1  (expected '$2', got '$3')"; fail=$((fail+1)); fi
 }
-cred() { grep -E "^$2" "generated/credentials/$1.txt" | sed -E 's/^[^:]*:[ ]*//'; }
+cred() { grep -E "^$2" "generated/credentials/$1/main.txt" | sed -E 's/^[^:]*:[ ]*//'; }
 
-[[ -f generated/credentials/otherco.txt ]] || scripts/add-customer.sh otherco "Other Co" 30 >/dev/null 2>&1
+[[ -f generated/credentials/otherco/main.txt ]] || scripts/add-customer.sh otherco "Other Co" 30 >/dev/null 2>&1
 
-A_W=$(cred testco  "influx WRITE"); A_L=$(cred testco  "loki push")
-B_W=$(cred otherco "influx WRITE"); B_L=$(cred otherco "loki push")
+A_W=$(cred testco  "influx WRITE tk"); A_L=$(cred testco  "loki push")
+B_W=$(cred otherco "influx WRITE tk"); B_L=$(cred otherco "loki push")
 NOW=$(date +%s%N)
 
 # ── Loki: push via gateway

@@ -99,11 +99,22 @@ What stays manual, in the UI: create your named admin user (then lock down `akad
 scripts/add-customer.sh acme "Acme Corp" 90     # 90 = metric retention in days
 ```
 
-Creates their bucket, tokens, Loki key, Grafana org + datasources + starter dashboard, and writes agent credentials to `generated/credentials/acme.txt` (mode 600). Then create the `tech-acme` and `cust-acme-users` groups in authentik.
+Creates their bucket, Grafana org + datasources + starter dashboard and authentik groups, then a first site `main` whose agent credentials are written to `generated/credentials/acme/main.txt` (mode 600). Then create the `tech-acme` and `cust-acme-users` groups in authentik.
 
 ### Change the dashboard
 
 Edit `dashboards/build_windows_overview.py` (house style: every percentage is a 0-100 gauge), run it to regenerate `windows-overview.json`, then `scripts/update-dashboards.sh` pushes it to every customer org.
+
+### Sites (locations) and per-site keys
+
+A customer is one bucket, one Loki tenant and one Grafana org. Each **site** (location) under it has its own write-only Influx token and Loki push key, so one office's key can be revoked without touching the others, and everything an agent sends carries a `site` label.
+
+```bash
+scripts/add-site.sh acme branch "Branch office"   # new keys + that site's one-file installer
+scripts/revoke-site.sh acme branch                # waits until the gateway really refuses the key
+```
+
+`add-customer.sh` creates the first site, `main`. Credentials live in `generated/credentials/<customer>/<site>.txt` and installers in `generated/agents/<customer>/<site>/`. All PCs at one site share that site's key (per-device keys are a later step).
 
 ### Install the Windows agent
 
