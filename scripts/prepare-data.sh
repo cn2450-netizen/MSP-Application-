@@ -16,7 +16,11 @@ for spec in \
   influx-data:1000:1000 \
   influx-config:1000:1000 \
   loki:10001:10001 \
-  grafana:472:0
+  grafana:472:0 \
+  meshcentral:1000:1000 \
+  meshcentral/data:1000:1000 \
+  meshcentral/files:1000:1000 \
+  meshcentral/backups:1000:1000
 do
   IFS=: read -r d uid gid <<<"$spec"
   install -d -m 0750 -o "$uid" -g "$gid" "${DATA_DIR}/${d}"

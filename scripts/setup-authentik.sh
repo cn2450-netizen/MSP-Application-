@@ -79,5 +79,29 @@ app="$(ak_req GET core/applications/grafana/ | jq -r '.pk')"
 ak_bind_group "$app" "$admins"
 echo "    Grafana provider $prov, application $app, access limited to bound groups"
 
+echo "MeshCentral application (OIDC)"
+if [[ -n "${MESH_HOST:-}" && -s secrets/meshcentral_oidc_secret ]]; then
+  mesh_json="$(jq -n --arg af "$auth_flow" --arg inf "$inv_flow" --arg key "$key" --argjson maps "$maps" \
+    --arg secret "$(cat secrets/meshcentral_oidc_secret)" --arg redirect "https://${MESH_HOST}/auth-oidc-callback" \
+    '{name:"MeshCentral",authorization_flow:$af,invalidation_flow:$inf,client_type:"confidential",
+      client_id:"meshcentral",client_secret:$secret,
+      redirect_uris:[{matching_mode:"strict",url:$redirect}],
+      signing_key:$key,property_mappings:$maps,issuer_mode:"per_provider",
+      grant_types:["authorization_code","refresh_token"]}')"
+  mprov="$(ak_req GET 'providers/oauth2/?name=MeshCentral' | jq -r '.results[0].pk // empty')"
+  if [[ -n "$mprov" ]]; then ak_req PATCH "providers/oauth2/${mprov}/" "$mesh_json" >/dev/null
+  else mprov="$(ak_req POST providers/oauth2/ "$mesh_json" | jq -r '.pk')"; fi
+  mapp_json="$(jq -n --argjson p "$mprov" --arg url "https://${MESH_HOST}/" \
+    '{name:"Remote Access",slug:"meshcentral",provider:$p,meta_launch_url:$url,group:"Remote",open_in_new_tab:false}')"
+  if ak_req GET 'core/applications/meshcentral/' >/dev/null 2>&1; then ak_req PATCH core/applications/meshcentral/ "$mapp_json" >/dev/null
+  else ak_req POST core/applications/ "$mapp_json" >/dev/null; fi
+  mapp="$(ak_req GET core/applications/meshcentral/ | jq -r '.pk')"
+  # Remote access is for staff only: msp-admins here, each customer's tech-<slug> group via add-customer / sync-customer-groups.
+  ak_bind_group "$mapp" "$admins"
+  echo "    MeshCentral provider $mprov, application $mapp, access limited to bound groups"
+else
+  echo "    skipped (MESH_HOST not set or secrets/meshcentral_oidc_secret missing; run scripts/init-secrets.sh)"
+fi
+
 echo
 echo "Done. Next: sign in at https://${AUTH_HOST}/ as akadmin (password in secrets/authentik_bootstrap_password) — you will be asked to enrol an authenticator."

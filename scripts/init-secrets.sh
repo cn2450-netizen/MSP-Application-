@@ -28,6 +28,9 @@ gen influx_admin_password 16
 gen influx_admin_token
 gen grafana_admin_password 16
 gen grafana_oauth_secret
+gen meshcentral_db_password
+gen meshcentral_oidc_secret
+gen meshcentral_session_key 48
 
 [[ -e .env ]] || { cp .env.example .env; echo "Created .env — edit hostnames before 'docker compose up'."; }
 chmod 600 .env

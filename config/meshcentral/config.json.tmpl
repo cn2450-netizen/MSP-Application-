@@ -1,0 +1,53 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Ylianst/MeshCentral/master/meshcentral-config-schema.json",
+  "settings": {
+    "cert": "@@MESH_HOST@@",
+    "port": 4430,
+    "aliasPort": 443,
+    "redirPort": 0,
+    "tlsOffload": "@@NPM_IP@@",
+    "sessionKey": "@@SESSION_KEY@@",
+    "selfUpdate": false,
+    "mpsPort": 0,
+    "amtManager": false,
+    "amtScanner": false,
+    "agentPing": 60,
+    "postgres": {
+      "host": "postgres",
+      "port": 5432,
+      "user": "meshcentral",
+      "password": "@@DB_PASSWORD@@",
+      "database": "meshcentral",
+      "createdatabase": false
+    }
+  },
+  "domains": {
+    "": {
+      "title": "CAL Technology Solutions",
+      "title2": "Remote Access",
+      "newAccounts": false,
+      "certUrl": "https://@@MESH_HOST@@/",
+      "authStrategies": {
+        "oidc": {
+          "issuer": "https://@@AUTH_HOST@@/application/o/meshcentral/",
+          "client": {
+            "client_id": "meshcentral",
+            "client_secret": "@@OIDC_SECRET@@",
+            "redirect_uri": "https://@@MESH_HOST@@/auth-oidc-callback"
+          },
+          "newAccounts": true,
+          "custom": {
+            "scope": "openid profile email",
+            "buttonText": "Sign in with CAL SSO"
+          },
+          "groups": {
+            "claim": "groups",
+            "scope": "profile",
+            "sync": true,
+            "siteadmin": ["msp-admins"]
+          }
+        }
+      }
+    }
+  }
+}

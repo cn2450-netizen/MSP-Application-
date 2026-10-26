@@ -32,6 +32,8 @@ secrets:
     file: ./secrets/grafana_admin_password
   grafana_oauth_secret:
     file: ./secrets/grafana_oauth_secret
+  meshcentral_db_password:
+    file: ./secrets/meshcentral_db_password
 
 services:
   postgres:
@@ -41,7 +43,7 @@ services:
       POSTGRES_USER: msp_admin
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
       POSTGRES_DB: postgres
-    secrets: [postgres_password, authentik_db_password]
+    secrets: [postgres_password, authentik_db_password, meshcentral_db_password]
     volumes:
       - ${DATA_DIR}/postgres:/var/lib/postgresql/data
       - ./config/postgres/init:/docker-entrypoint-initdb.d:ro
@@ -170,3 +172,29 @@ services:
       - "${BIND_ADDR}:${GRAFANA_PORT}:3000"
     networks: [edge, backend]
     depends_on: [influxdb, loki]
+
+  # Remote access (phase 4). Signs in through authentik (OIDC); uses the shared Postgres. Runs as an unprivileged
+  # user by starting node directly instead of the image's root entrypoint (which only adds optional dynamic config).
+  # Agents connect over WSS through NPM, so NPM needs WebSockets and long timeouts for this host.
+  meshcentral:
+    <<: *common
+    build:
+      context: ./docker/meshcentral
+      args:
+        MESH_TAG: ${MESH_TAG}
+    image: msp-platform/meshcentral:${MESH_TAG}
+    user: "1000:1000"
+    entrypoint: ["node", "/opt/meshcentral/meshcentral/meshcentral", "--configfile", "/opt/meshcentral/meshcentral-data/config.json"]
+    environment:
+      NODE_ENV: production
+    cap_drop: [ALL]
+    volumes:
+      - ${DATA_DIR}/meshcentral/data:/opt/meshcentral/meshcentral-data
+      - ${DATA_DIR}/meshcentral/files:/opt/meshcentral/meshcentral-files
+      - ${DATA_DIR}/meshcentral/backups:/opt/meshcentral/meshcentral-backups
+      - ./generated/meshcentral/config.json:/opt/meshcentral/meshcentral-data/config.json:ro
+    ports:
+      - "${BIND_ADDR}:${MESH_PORT}:4430"
+    networks: [edge, backend]
+    depends_on:
+      postgres: { condition: service_healthy }

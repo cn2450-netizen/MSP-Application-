@@ -89,6 +89,8 @@ tech_grp="$(ak_group "tech-${slug}")"
 cust_grp="$(ak_group "cust-${slug}-users")"
 ak_bind_group "$grafana_app" "$tech_grp"
 ak_bind_group "$grafana_app" "$cust_grp"
+mesh_app="$(ak_req GET core/applications/meshcentral/ 2>/dev/null | jq -r '.pk // empty' || true)"
+if [[ -n "$mesh_app" ]]; then ak_bind_group "$mesh_app" "$tech_grp"; fi   # remote access is for staff only
 
 echo "[5/5] Registry + Grafana org mapping"
 printf '%s\t%s\t%s\n' "$slug" "$name" "$(date -u +%FT%TZ)" >> generated/customers.tsv
