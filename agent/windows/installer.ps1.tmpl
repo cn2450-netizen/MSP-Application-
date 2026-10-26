@@ -67,7 +67,7 @@ try {
     if ($Uninstall) {
         if ($existing) {
             if ($existing.Status -ne 'Stopped') { Stop-Service -Name $ServiceName -Force }
-            if (Test-Path $exePath) { [void](Invoke-Native $exePath @('service', 'uninstall', '--service-name', $ServiceName)) }
+            if (Test-Path $exePath) { [void](Invoke-Native $exePath @('--service-name', $ServiceName, 'service', 'uninstall')) }
             else { [void](Invoke-Native 'sc.exe' @('delete', $ServiceName)) }
         }
         if (Test-Path $InstallDir) { Remove-Item -Recurse -Force -Path $InstallDir }
@@ -109,7 +109,7 @@ try {
         if ($existing) {
             Write-Step 'Existing install found; stopping it for upgrade.'
             if ($existing.Status -ne 'Stopped') { Stop-Service -Name $ServiceName -Force }
-            if (Test-Path $exePath) { [void](Invoke-Native $exePath @('service', 'uninstall', '--service-name', $ServiceName)) }
+            if (Test-Path $exePath) { [void](Invoke-Native $exePath @('--service-name', $ServiceName, 'service', 'uninstall')) }
         }
 
         # --- 3. Files, config, permissions ---------------------------------------
@@ -134,14 +134,18 @@ try {
 
         # --- 5. Install and start the service ------------------------------------
         Write-Step 'Installing the service...'
-        $install = Invoke-Native $exePath @('service', 'install', '--config', $confPath, '--service-name', $ServiceName,
-            '--service-display-name', 'MSP Monitoring Agent', '--service-auto-restart', '--service-restart-delay', '30s')
+        # Flag order matters: global flags (--config, --service-name) go BEFORE 'service'; only the
+        # service-specific flags go after 'install'. Verified against Telegraf 1.40.2.
+        $install = Invoke-Native $exePath @('--config', $confPath, '--service-name', $ServiceName, 'service', 'install',
+            '--display-name', 'MSP Monitoring Agent', '--auto-restart', '--restart-delay', '30s')
         if ($install.ExitCode -ne 0) { throw "Service install failed (exit $($install.ExitCode)):`n$($install.Output)" }
+        # Start from a clean log so errors from an earlier run (or the config check) can't be mistaken for this one.
+        $logFile = Join-Path $InstallDir 'telegraf.log'
+        if (Test-Path $logFile) { Remove-Item -Force -Path $logFile }
         Start-Service -Name $ServiceName
         Write-Step "Service started. Waiting up to 60s to confirm data is being delivered..."
 
         # --- 6. Confirm delivery -------------------------------------------------
-        $logFile = Join-Path $InstallDir 'telegraf.log'
         $problem = $null
         for ($i = 0; $i -lt 12; $i++) {
             Start-Sleep -Seconds 5
