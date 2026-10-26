@@ -59,15 +59,6 @@ DISK_PCT = ('from(bucket: v.defaultBucket) |> range(start: -15m) '
             f'|> filter(fn: (r) => r._measurement == "volume" and r._field == "used_percent" and {HOST}) '
             '|> last() |> keep(columns: ["host", "name", "_value"])')
 
-DISK_TABLE = ('from(bucket: v.defaultBucket) |> range(start: -15m) '
-              f'|> filter(fn: (r) => r._measurement == "volume" and {HOST} and (r._field == "size_bytes" or r._field == "free_bytes")) '
-              '|> last() |> drop(columns: ["_time", "_start", "_stop"]) '
-              '|> pivot(rowKey: ["host", "name"], columnKey: ["_field"], valueColumn: "_value") '
-              '|> map(fn: (r) => ({r with used_bytes: r.size_bytes - r.free_bytes})) '
-              '|> group() '
-              '|> keep(columns: ["host", "name", "size_bytes", "used_bytes", "free_bytes"]) '
-              '|> rename(columns: {name: "volume"})')
-
 BITLOCKER = ('from(bucket: v.defaultBucket) |> range(start: -1h) '
              f'|> filter(fn: (r) => r._measurement == "bitlocker" and {HOST} and (r._field == "protection_status" or r._field == "encryption_percentage" or r._field == "volume_status")) '
              '|> last() |> drop(columns: ["_time", "_start", "_stop"]) '
@@ -118,14 +109,12 @@ panels.append(gauge(1, "CPU used (5 min average)", 0, 0, 6, 7, CPU, "${__field.l
 panels.append(gauge(2, "Memory used", 6, 0, 6, 7, MEM, "${__field.labels.host}"))
 panels.append(gauge(3, "Disk used", 12, 0, 12, 7, DISK_PCT, "${__field.labels.host}  ${__field.labels.name}"))
 
-# The percentage is already shown by the "Disk used" gauges, so this table carries only what they lack: capacity.
-disk = base(4, "Disk capacity", "table", 0, 7, 12, 8, [flux(DISK_TABLE)])
-disk["fieldConfig"]["defaults"] = {"unit": "bytes"}
-disk["transformations"] = [{"id": "organize", "options": {
-    "excludeByName": {},
-    "indexByName": {"host": 0, "volume": 1, "size_bytes": 2, "used_bytes": 3, "free_bytes": 4},
-    "renameByName": {"host": "Host", "volume": "Volume", "size_bytes": "Size", "used_bytes": "Used", "free_bytes": "Free"}}}]
-panels.append(disk)
+# Placeholder: backup status (last run, result, size) goes here once backups exist (roadmap phase 5).
+# The disk capacity table that used to be here was dropped; the "Disk used" gauges and the Trends row cover disks.
+backups = base(4, "Backups", "text", 0, 7, 12, 8, [])
+backups["datasource"] = None
+backups["options"] = {"mode": "markdown", "content": "Backup status will appear here."}
+panels.append(backups)
 
 bl = base(5, "BitLocker", "table", 12, 7, 12, 8, [flux(BITLOCKER)])
 bl["fieldConfig"]["overrides"] = [

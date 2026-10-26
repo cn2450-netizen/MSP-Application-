@@ -225,57 +225,24 @@
     },
     {
       "id": 4,
-      "title": "Disk capacity",
-      "type": "table",
+      "title": "Backups",
+      "type": "text",
       "gridPos": {
         "x": 0,
         "y": 7,
         "w": 12,
         "h": 8
       },
-      "datasource": {
-        "type": "influxdb",
-        "uid": "influx"
+      "datasource": null,
+      "targets": [],
+      "options": {
+        "mode": "markdown",
+        "content": "Backup status will appear here."
       },
-      "targets": [
-        {
-          "refId": "A",
-          "query": "from(bucket: v.defaultBucket) |> range(start: -15m) |> filter(fn: (r) => r._measurement == \"volume\" and r.host =~ /^${host:regex}$/ and (r._field == \"size_bytes\" or r._field == \"free_bytes\")) |> last() |> drop(columns: [\"_time\", \"_start\", \"_stop\"]) |> pivot(rowKey: [\"host\", \"name\"], columnKey: [\"_field\"], valueColumn: \"_value\") |> map(fn: (r) => ({r with used_bytes: r.size_bytes - r.free_bytes})) |> group() |> keep(columns: [\"host\", \"name\", \"size_bytes\", \"used_bytes\", \"free_bytes\"]) |> rename(columns: {name: \"volume\"})",
-          "datasource": {
-            "type": "influxdb",
-            "uid": "influx"
-          }
-        }
-      ],
-      "options": {},
       "fieldConfig": {
-        "defaults": {
-          "unit": "bytes"
-        },
+        "defaults": {},
         "overrides": []
-      },
-      "transformations": [
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {},
-            "indexByName": {
-              "host": 0,
-              "volume": 1,
-              "size_bytes": 2,
-              "used_bytes": 3,
-              "free_bytes": 4
-            },
-            "renameByName": {
-              "host": "Host",
-              "volume": "Volume",
-              "size_bytes": "Size",
-              "used_bytes": "Used",
-              "free_bytes": "Free"
-            }
-          }
-        }
-      ]
+      }
     },
     {
       "id": 5,
