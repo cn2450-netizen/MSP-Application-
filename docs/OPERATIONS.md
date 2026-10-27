@@ -67,7 +67,7 @@ Scripts that touch MeshCentral need a short-lived login token because there is n
 - **LUKS key** for the data LUN: vault plus a printed copy. Without it the platform data is unrecoverable.
 - **`./secrets`**: back up offline. It is excluded from git.
 - **Each computer's repository password**: in its credentials file and in your vault. Without it its backups cannot be read.
-- **Rotate** the lab passwords and remove passwordless sudo before production.
+- Admin sudo requires a password (passwordless sudo removed); scripts that use `sudo` need an interactive session.
 
 ## Not yet backed up
 

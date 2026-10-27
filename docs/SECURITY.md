@@ -45,15 +45,14 @@ This describes the controls that exist and the ones that do not yet. It is not a
 
 These are tracked in [ROADMAP.md](ROADMAP.md). Close the first group before real customer data goes on this system:
 
-1. Change the lab passwords and remove passwordless sudo for the admin user.
-2. Enable CHAP on the iSCSI target.
-3. HSTS on the remaining hosts; self-service password reset and mail.
-4. AD (LDAPS) source in authentik.
-5. Security scan, hard power-off test and a load test.
-6. Platform backup (the platform has no backup of its own yet).
-7. Catalog file names are plain in the database. Per-customer encryption of names is a possible later step.
-8. Agent tokens are per site for monitoring, so one key is shared by the PCs of a site.
-9. The installer is a PowerShell script, not a signed MSI/EXE.
+1. Enable CHAP on the iSCSI target.
+2. HSTS on the remaining hosts; self-service password reset and mail.
+3. AD (LDAPS) source in authentik.
+4. Security scan, hard power-off test and a load test.
+5. Platform backup (the platform has no backup of its own yet).
+6. Catalog file names are plain in the database. Per-customer encryption of names is a possible later step.
+7. Agent tokens are per site for monitoring, so one key is shared by the PCs of a site.
+8. The installer is a PowerShell script, not a signed MSI/EXE.
 
 ## Reporting and review
 

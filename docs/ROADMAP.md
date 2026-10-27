@@ -8,11 +8,14 @@
 - Customer backups: restic over an append-only REST server on the NAS; scheduling; daily maintenance and verified test restore; backup portal with a server-side catalog, restore location picker, long-poll agent; Replace this computer.
 - Customer offboarding: suspend (cut all access) and purge (delete data) with an audit log.
 
+## Done
+
+- Lab passwords rotated and passwordless sudo removed (verified: sudo now asks for a password).
+
 ## Before real customer data goes on the system
 
 | Item | Why |
 |---|---|
-| Rotate every lab password; remove passwordless sudo for the admin user | They were shared during the build |
 | CHAP on the iSCSI target | The target is restricted by initiator name and address only |
 | HSTS on the remaining hosts | Only the portal sets it |
 | Self-service password reset and mail (SMTP) | No recovery flow today; an admin removes the authenticator for lost phones |
