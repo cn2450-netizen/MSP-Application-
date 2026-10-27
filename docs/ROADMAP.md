@@ -11,6 +11,7 @@
 ## Done
 
 - Platform backup: databases, InfluxDB, secrets, config and app data to the NAS daily 03:30, with retention, integrity check and a restore proof (`scripts/backup-platform.sh`). Still to do: rehearse a full rebuild from it, and add an off-site copy.
+- Container images updated and re-scanned (gateway nginx 1.30.6, rest-server built from source on Go 1.26, MeshCentral 1.2.6, authentik 2026.8.5, InfluxDB 2.9.1, Loki 3.6.17, Grafana 12.4.13; postgres has no newer image). Keep InfluxDB hashed tokens off: downgrading with them on erases all API tokens. A copy of the old Grafana database sits in the Grafana data directory as `grafana.db.bak-11.4.0-20261027`; delete it once you are happy with Grafana 12.
 - Host firewall: only NPM reaches the platform's ports; rpcbind closed (verified from a workstation).
 - Lab passwords rotated and passwordless sudo removed (verified: sudo now asks for a password).
 
@@ -23,7 +24,6 @@
 | SSH hardening on the VM | Disable password login and root login, turn off X11 forwarding (key login is the only one in use) |
 | Self-service password reset and mail (SMTP) | No recovery flow today; an admin removes the authenticator for lost phones |
 | AD source (LDAPS) for staff | Staff are currently local authentik users |
-| Update the remaining container images | Done 2026-10-27: gateway nginx, rest-server (built from source), MeshCentral, authentik 2026.8.5, InfluxDB 2.9.1 (postgres has no newer image). To do: Grafana (2 years old), then Loki. InfluxDB hashed tokens must stay off unless you accept that downgrading then erases the API tokens. Run the isolation and backup tests and re-scan after each |
 | Hard power-off test, load test, authenticated web testing | Not run yet |
 | HIPAA/BAA review, risk analysis, customer agreements | Compliance work only you can do |
 | Approve-by-second-technician test through the real UI | Needs a second staff account; only tested at the database level |

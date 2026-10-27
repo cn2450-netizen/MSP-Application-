@@ -140,7 +140,7 @@ services:
 
   grafana:
     <<: *common
-    image: grafana/grafana-oss:${GRAFANA_TAG}
+    image: grafana/grafana:${GRAFANA_TAG}
     env_file:
       - ./generated/grafana.env   # org mapping, rendered by scripts/render-config.sh
     environment:
