@@ -47,3 +47,9 @@ export const JobTtlMinutes: Record<JobType, number> = {
 /** The folders/files a person may choose to back up: drive-rooted folders, never "" (the drive list) and no wildcards. */
 export const backupPath = winPath.refine((p) => p !== "" && !/[*]/.test(p), "choose a folder");
 export const PolicySchema = z.object({ include: z.array(backupPath).min(1).max(200) }).strict();
+
+/** Which days (0 = Sunday ... 6 = Saturday) and what local time of day the backup runs. */
+export const ScheduleSchema = z.object({
+  days: z.array(z.number().int().min(0).max(6)).min(1).max(7),
+  time: z.string().regex(/^([01][0-9]|2[0-3]):[0-5][0-9]$/),
+}).strict();

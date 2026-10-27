@@ -45,6 +45,19 @@ export async function setPolicy(machineId: string, include: string[], by: string
     [machineId, JSON.stringify(include), by]);
 }
 
+export type ScheduleRow = { days: number[]; at_time: string; version: number; updated_by: string; updated_at: string };
+
+export async function getSchedule(machineId: string) {
+  return q1<ScheduleRow>("SELECT days, at_time, version, updated_by, updated_at FROM schedule WHERE machine_id = $1", [machineId]);
+}
+
+export async function setSchedule(machineId: string, days: number[], time: string, by: string) {
+  await q(
+    `INSERT INTO schedule(machine_id, days, at_time, updated_by) VALUES ($1,$2,$3,$4)
+     ON CONFLICT (machine_id) DO UPDATE SET days = $2, at_time = $3, version = schedule.version + 1, updated_by = $4, updated_at = now()`,
+    [machineId, JSON.stringify(days), time, by]);
+}
+
 /** Validates the parameters, then queues the job. Throws if they are not valid for that job type. */
 export async function createJob(machineId: string, type: JobType, params: unknown, requestedBy: string) {
   const clean = JobSchemas[type].parse(params);

@@ -62,6 +62,7 @@ export async function POST(req: Request) {
   await q("UPDATE job SET status = 'failed', error = 'the machine stopped responding', finished_at = now() WHERE machine_id = $1 AND status = 'running' AND updated_at < now() - interval '2 hours'", [agent.id]);
 
   const policy = await q1<{ include_paths: string[]; version: number }>("SELECT include_paths, version FROM policy WHERE machine_id = $1", [agent.id]);
+  const schedule = await q1<{ days: number[]; at_time: string; version: number }>("SELECT days, at_time, version FROM schedule WHERE machine_id = $1", [agent.id]);
   const m = await q1<{ interactive: boolean }>("SELECT (interactive_until IS NOT NULL AND interactive_until > now()) AS interactive FROM machine WHERE id = $1", [agent.id]);
 
   // One job at a time: hand out the next only if none is running (long jobs run inside the agent's own poll).
@@ -75,6 +76,7 @@ export async function POST(req: Request) {
   return NextResponse.json({
     interactive: !!m?.interactive,
     policy: policy ? { version: policy.version, include: policy.include_paths } : null,
+    schedule: schedule ? { version: schedule.version, days: schedule.days, time: schedule.at_time } : null,
     job: job ?? null,
   });
 }

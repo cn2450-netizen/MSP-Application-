@@ -16,6 +16,15 @@ export function bytes(v: string | number | null | undefined): string {
   return `${(n / 1024 ** i).toFixed(i === 0 ? 0 : 1)} ${u[i]}`;
 }
 
+/** "Every day at 2:00 AM", "Mon, Wed, Fri at 9:30 PM" from a schedule's days (0 = Sunday) and "HH:MM". */
+export function describeSchedule(days: number[], time: string): string {
+  const [h, m] = time.split(":").map(Number);
+  const clock = `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
+  const names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const who = days.length === 7 ? "Every day" : [...days].sort((a, b) => a - b).map((d) => names[d]).join(", ");
+  return `${who} at ${clock}`;
+}
+
 export function when(iso: string | null | undefined): string {
   return iso ? new Date(iso).toLocaleString() : "never";
 }

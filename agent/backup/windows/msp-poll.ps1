@@ -176,6 +176,26 @@ try { $os = (Get-CimInstance Win32_OperatingSystem).Caption } catch { }
 $policyVersion = -1
 if (Test-Path $policyFile) { try { $policyVersion = [int](Get-Content -Raw -Encoding UTF8 $policyFile | ConvertFrom-Json).version } catch { } }
 
+$scheduleFile = Join-Path $Root 'schedule.json'
+$scheduleVersion = -1
+if (Test-Path $scheduleFile) { try { $scheduleVersion = [int](Get-Content -Raw -Encoding UTF8 $scheduleFile | ConvertFrom-Json).version } catch { } }
+
+# Moves the nightly backup task to the days/time chosen in the portal. Only the trigger changes (the task keeps its
+# SYSTEM account and settings); the version is remembered only after Windows accepted the change.
+function Set-BackupSchedule($Sched) {
+    $dayNames = @('Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday')
+    $days = @($Sched.days | ForEach-Object { [int]$_ } | Where-Object { $_ -ge 0 -and $_ -le 6 } | Sort-Object -Unique)
+    if ($days.Count -eq 0 -or $days.Count -gt 7) { throw 'bad schedule days' }
+    if ([string]$Sched.time -notmatch '^([01][0-9]|2[0-3]):[0-5][0-9]$') { throw 'bad schedule time' }
+    $at = [datetime]::ParseExact([string]$Sched.time, 'HH:mm', [Globalization.CultureInfo]::InvariantCulture)
+    $trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek ($days | ForEach-Object { $dayNames[$_] }) -At $at
+    Set-ScheduledTask -TaskName $taskName -TaskPath $taskPath -Trigger $trigger | Out-Null
+    $tmp = "$scheduleFile.tmp"
+    Set-Content -Path $tmp -Value (@{ version = [int]$Sched.version; days = $days; time = [string]$Sched.time } | ConvertTo-Json -Compress) -Encoding UTF8
+    Move-Item -Force -Path $tmp -Destination $scheduleFile
+    Write-Log ("backup schedule updated by the portal (version {0}): days {1} at {2}" -f [int]$Sched.version, ($days -join ','), $Sched.time)
+}
+
 do {
     $body = @{ agent_version = $script:AgentVersion; os = $os }
     if (Test-Path $lastRunFile) { try { $body.last_run = (Get-Content -Raw $lastRunFile | ConvertFrom-Json) } catch { } }
@@ -194,6 +214,10 @@ do {
             $policyVersion = [int]$reply.policy.version
             Write-Log ("folder choice updated by the portal (version {0}): {1}" -f $policyVersion, ($inc -join '; '))
         }
+    }
+    if ($reply.schedule -and [int]$reply.schedule.version -ne $scheduleVersion) {
+        try { Set-BackupSchedule $reply.schedule; $scheduleVersion = [int]$reply.schedule.version }
+        catch { Write-Log ("could not apply the backup schedule (will retry): {0}" -f $_.Exception.Message) }
     }
     if ($reply.job) { Invoke-AgentJob $reply.job }
     if (-not $reply.interactive -and -not $reply.job) { break }

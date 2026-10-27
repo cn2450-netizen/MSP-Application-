@@ -1,8 +1,8 @@
 import { notFound, redirect } from "next/navigation";
 import { getScope } from "@/lib/session";
-import { getMachine, getPolicy, recentJobs, health } from "@/lib/data";
+import { getMachine, getPolicy, getSchedule, recentJobs, health } from "@/lib/data";
 import { isStaffFor } from "@/lib/authz";
-import { ago, bytes, when } from "@/lib/format";
+import { ago, bytes, when, describeSchedule } from "@/lib/format";
 import BackupNow from "./BackupNow";
 import Heartbeat from "./Heartbeat";
 
@@ -20,6 +20,7 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
   if (!m) notFound();
   const h = health(m);
   const policy = await getPolicy(m.id);
+  const schedule = await getSchedule(m.id);
   const jobs = await recentJobs(m.id);
   const staff = isStaffFor(scope, m.customer_slug);
   const online = m.last_seen && Date.now() - new Date(m.last_seen).getTime() < 5 * 60_000;
@@ -56,6 +57,14 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
         )}
         <a className="btn" href={`/machines/${m.id}/folders`}>Choose folders</a>
         {policy && <span className="muted small" style={{ marginLeft: 12 }}>Changed by {policy.updated_by}, {ago(policy.updated_at)}. Applies from the next backup.</span>}
+      </div>
+
+      <div className="card">
+        <h2 style={{ marginTop: 0 }}>When it runs</h2>
+        {schedule ? <p style={{ margin: "0 0 12px" }}>{describeSchedule(schedule.days, schedule.at_time)}</p>
+                  : <p className="muted">Every night at a time picked when backup was installed. You can choose a time that suits the business.</p>}
+        <a className="btn" href={`/machines/${m.id}/schedule`}>Change schedule</a>
+        {schedule && <span className="muted small" style={{ marginLeft: 12 }}>Changed by {schedule.updated_by}, {ago(schedule.updated_at)}.</span>}
       </div>
 
       <div className="card">

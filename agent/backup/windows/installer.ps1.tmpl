@@ -154,6 +154,9 @@ try {
         Register-ScheduledTask -TaskName $TaskName -TaskPath $taskPath -Action $action -Trigger $trigger `
             -Principal $taskUser -Settings $settings -Description 'MSP daily backup (restic, append-only server)' -Force | Out-Null
         Write-Step "Scheduled: daily at $StartTime (task \MSP\$TaskName)."
+        # The task was just re-registered with the installer's own time: forget which portal schedule was applied so the
+        # next check-in applies the customer's choice again.
+        Remove-Item -Force -Path (Join-Path $InstallDir 'schedule.json') -ErrorAction SilentlyContinue
 
         # The check-in task: every minute, outbound HTTPS only. It lets the portal show status, change the folder choice,
         # list/search/restore backups and start a backup on demand. Skipped when this installer has no portal address.
