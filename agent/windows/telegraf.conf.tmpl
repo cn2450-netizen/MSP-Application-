@@ -92,6 +92,14 @@
   timeout = "120s"
   interval = "15m"
 
+# Backup result written by the backup agent after each run (agent/backup/windows/msp-backup.ps1). Absent file = no
+# backup agent on this machine, which is fine. The line carries its own timestamp and last_success, so re-reading an
+# unchanged file just rewrites the same point; the dashboard alerts on last_success going stale.
+[[inputs.file]]
+  files = ["C:/Program Files/MSP-Backup/status.influx"]
+  data_format = "influx"
+  interval = "300s"
+
 # -- Logs (Warning and above; deliberately NOT the Security log) --------------
 
 [[inputs.win_eventlog]]

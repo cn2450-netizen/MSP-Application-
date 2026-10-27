@@ -101,6 +101,14 @@ DISK_FREE_TREND = ('from(bucket: v.defaultBucket) |> range(start: v.timeRangeSta
                    '|> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false) '
                    '|> keep(columns: ["_time", "_value", "host", "name"])')
 
+BACKUPS = ('from(bucket: v.defaultBucket) |> range(start: -30d) '
+           f'|> filter(fn: (r) => r._measurement == "backup_run" and {HOST} and (r._field == "result_code" or r._field == "last_success" or r._field == "duration_s" or r._field == "data_added" or r._field == "bytes_processed" or r._field == "message")) '
+           '|> last() |> drop(columns: ["_time", "_start", "_stop"]) '
+           '|> pivot(rowKey: ["host"], columnKey: ["_field"], valueColumn: "_value") |> group() '
+           '|> map(fn: (r) => ({r with age_h: float(v: int(v: now()) / 1000000000 - r.last_success) / 3600.0, last_success: r.last_success * 1000})) '
+           '|> keep(columns: ["host", "result_code", "last_success", "age_h", "duration_s", "bytes_processed", "data_added", "message"]) '
+           '|> rename(columns: {result_code: "last_run", last_success: "last_good_backup", age_h: "hours_since_good", duration_s: "seconds", bytes_processed: "protected", data_added: "new_data"})')
+
 # ---- panels ----------------------------------------------------------------------------------------------
 
 panels = []
@@ -109,11 +117,27 @@ panels.append(gauge(1, "CPU used (5 min average)", 0, 0, 6, 7, CPU, "${__field.l
 panels.append(gauge(2, "Memory used", 6, 0, 6, 7, MEM, "${__field.labels.host}"))
 panels.append(gauge(3, "Disk used", 12, 0, 12, 7, DISK_PCT, "${__field.labels.host}  ${__field.labels.name}"))
 
-# Placeholder: backup status (last run, result, size) goes here once backups exist (roadmap phase 5).
-# The disk capacity table that used to be here was dropped; the "Disk used" gauges and the Trends row cover disks.
-backups = base(4, "Backups", "text", 0, 7, 12, 8, [])
-backups["datasource"] = None
-backups["options"] = {"mode": "markdown", "content": "Backup status will appear here."}
+# Backup status: newest backup_run per machine (written by agent/backup/windows/msp-backup.ps1). A machine that
+# stops reporting is caught by "hours_since_good" climbing, not by the row disappearing.
+backups = base(4, "Backups", "table", 0, 7, 12, 8, [flux(BACKUPS)])
+backups["fieldConfig"]["overrides"] = [
+    {"matcher": {"id": "byName", "options": "last_run"}, "properties": [
+        {"id": "mappings", "value": [{"type": "value", "options": {
+            "0": {"text": "OK", "color": "green", "index": 0},
+            "2": {"text": "Partial", "color": "orange", "index": 1},
+            "1": {"text": "FAILED", "color": "red", "index": 2}}}]},
+        {"id": "custom.cellOptions", "value": {"type": "color-text"}}]},
+    {"matcher": {"id": "byName", "options": "hours_since_good"}, "properties": [
+        {"id": "unit", "value": "h"}, {"id": "decimals", "value": 0},
+        {"id": "thresholds", "value": {"mode": "absolute", "steps": [
+            {"color": "green", "value": None}, {"color": "orange", "value": 30}, {"color": "red", "value": 54}]}},
+        {"id": "custom.cellOptions", "value": {"type": "color-background", "mode": "basic"}}]},
+    {"matcher": {"id": "byName", "options": "last_good_backup"}, "properties": [
+        {"id": "unit", "value": "dateTimeAsLocal"}]},
+    {"matcher": {"id": "byName", "options": "protected"}, "properties": [{"id": "unit", "value": "bytes"}]},
+    {"matcher": {"id": "byName", "options": "new_data"}, "properties": [{"id": "unit", "value": "bytes"}]},
+    {"matcher": {"id": "byName", "options": "seconds"}, "properties": [{"id": "unit", "value": "s"}]},
+]
 panels.append(backups)
 
 bl = base(5, "BitLocker", "table", 12, 7, 12, 8, [flux(BITLOCKER)])
@@ -159,7 +183,7 @@ panels.append({"id": 9, "type": "row", "title": "Trends", "collapsed": True,
 
 dashboard = {
     "uid": "windows-overview", "title": "Windows Overview", "tags": ["msp", "windows"],
-    "schemaVersion": 39, "version": 2, "refresh": "1m",
+    "schemaVersion": 39, "version": 3, "refresh": "1m",
     "time": {"from": "now-6h", "to": "now"},
     "templating": {"list": [{
         "name": "host", "label": "Host", "type": "query", "datasource": INFLUX,

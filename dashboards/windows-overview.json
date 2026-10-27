@@ -6,7 +6,7 @@
     "windows"
   ],
   "schemaVersion": 39,
-  "version": 2,
+  "version": 3,
   "refresh": "1m",
   "time": {
     "from": "now-6h",
@@ -226,22 +226,162 @@
     {
       "id": 4,
       "title": "Backups",
-      "type": "text",
+      "type": "table",
       "gridPos": {
         "x": 0,
         "y": 7,
         "w": 12,
         "h": 8
       },
-      "datasource": null,
-      "targets": [],
-      "options": {
-        "mode": "markdown",
-        "content": "Backup status will appear here."
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influx"
       },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: v.defaultBucket) |> range(start: -30d) |> filter(fn: (r) => r._measurement == \"backup_run\" and r.host =~ /^${host:regex}$/ and (r._field == \"result_code\" or r._field == \"last_success\" or r._field == \"duration_s\" or r._field == \"data_added\" or r._field == \"bytes_processed\" or r._field == \"message\")) |> last() |> drop(columns: [\"_time\", \"_start\", \"_stop\"]) |> pivot(rowKey: [\"host\"], columnKey: [\"_field\"], valueColumn: \"_value\") |> group() |> map(fn: (r) => ({r with age_h: float(v: int(v: now()) / 1000000000 - r.last_success) / 3600.0, last_success: r.last_success * 1000})) |> keep(columns: [\"host\", \"result_code\", \"last_success\", \"age_h\", \"duration_s\", \"bytes_processed\", \"data_added\", \"message\"]) |> rename(columns: {result_code: \"last_run\", last_success: \"last_good_backup\", age_h: \"hours_since_good\", duration_s: \"seconds\", bytes_processed: \"protected\", data_added: \"new_data\"})",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influx"
+          }
+        }
+      ],
+      "options": {},
       "fieldConfig": {
         "defaults": {},
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "last_run"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "OK",
+                        "color": "green",
+                        "index": 0
+                      },
+                      "2": {
+                        "text": "Partial",
+                        "color": "orange",
+                        "index": 1
+                      },
+                      "1": {
+                        "text": "FAILED",
+                        "color": "red",
+                        "index": 2
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "hours_since_good"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "h"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 30
+                    },
+                    {
+                      "color": "red",
+                      "value": 54
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "last_good_backup"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeAsLocal"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "protected"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "new_data"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "seconds"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              }
+            ]
+          }
+        ]
       }
     },
     {
