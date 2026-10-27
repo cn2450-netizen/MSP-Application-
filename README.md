@@ -4,19 +4,26 @@ Self-hosted MSP tooling: single sign-on with MFA, per-customer monitoring, and (
 
 ## Status
 
-**Phase 1 (foundation + Windows monitoring) is built and tested on a Debian 13 VM with an iSCSI-backed data volume.**
+Phases 1 (monitoring), 4 (remote access) and 5 (customer backups, with a portal) are built and tested in the lab on a Debian 13 VM with an iSCSI-backed data volume. Phases 2 (SNMP/syslog) and 3 (ticketing) are next. See [docs/ROADMAP.md](docs/ROADMAP.md) for what is verified and what still has to happen before real customer data goes on it.
 
-Tested: full stack boots; customer onboarding (with rollback on failure); 19 cross-tenant isolation checks pass (`scripts/test-isolation.sh`); VM rebuild from scratch using only the bootstrap script and the LUKS key; clean reboot with automatic LUN attach.
+| Phase | Scope | State |
+|---|---|---|
+| 1 | authentik (MFA, AD via LDAPS, local users), Postgres, InfluxDB, Loki, Grafana, ingest gateway, Windows agent, per-customer isolation | Built, tested (AD source not yet configured) |
+| 2 | SNMP polling + traps, syslog, network dashboards | Planned |
+| 3 | Ticketing app (custom, Postgres) with alert-to-ticket and recurring-problem detection | Planned |
+| 4 | MeshCentral remote access, SSO via authentik | Built, tested |
+| 5 | Customer computer backups (restic), portal, restore, replace computer | Built, tested; Wasabi cold tier deferred |
 
-**Not yet tested:** the Windows agent on a real Windows machine, and the authentik UI setup (MFA, AD/LDAPS, Grafana OIDC login) — those steps are manual and documented below. Image tags in `.env.example` were the newest that pulled on amd64 when tested; check for newer security releases before a production deploy.
+## Documentation
 
-| Phase | Scope |
+| Document | For |
 |---|---|
-| 1 | authentik (MFA, AD via LDAPS, local users), Postgres, InfluxDB, Loki, Grafana, ingest gateway, Windows agent (CPU/RAM/disk/services/BitLocker/event logs), per-customer isolation |
-| 2 | SNMP polling + traps, syslog, network dashboards |
-| 3 | Ticketing app (custom, Postgres) with alert-to-ticket and recurring-problem detection |
-| 4 | MeshCentral remote access, SSO via authentik |
-| 5 | Backups: local / NFS / SMB / S3, per-customer age-encrypted exports |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the pieces fit, isolation, where state lives |
+| [docs/ONBOARDING.md](docs/ONBOARDING.md) | Step-by-step customer onboarding and offboarding |
+| [docs/OPERATIONS.md](docs/OPERATIONS.md) | Daily checks, updates, rebuild, troubleshooting |
+| [docs/BACKUP.md](docs/BACKUP.md) | Backup and restore guide for customers and technicians |
+| [docs/SECURITY.md](docs/SECURITY.md) | Controls in place, data classification, known gaps |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | Status, open items, plans |
 
 ## Architecture
 
@@ -214,7 +221,7 @@ Measured on Telegraf 1.40.2 / Windows: the program is ~315 MB on disk (the agent
 - Secrets are Docker secrets from `./secrets` (dir mode 700), never in `.env` or the compose file. Back `./secrets` up offline; it is excluded from git.
 - Data stores are on an `internal` Docker network with no published ports and no internet access.
 - The gateway exposes only the two write paths agents need, rate-limits, caps body size, and never logs credentials.
-- Agent credentials are per-customer and write-only; a stolen agent token cannot read anything. Rotate by re-running onboarding for a new key (revocation tooling comes with a later phase).
+- Agent credentials are per-customer and write-only; a stolen agent token cannot read anything. Revoke with `scripts/revoke-site.sh`; end a customer with `scripts/offboard-customer.sh`.
 - The agent does **not** ship the Windows Security log (it contains sensitive data). Add specific event IDs deliberately if you need them.
 - Grafana's login form is disabled; everything goes through authentik. Break-glass is the `msp-admin` API account; re-enable the form by overriding `GF_AUTH_DISABLE_LOGIN_FORM`.
-- Known gaps for now: no backups yet (phase 5), no SIEM-style alerting, containers not yet hardened beyond `no-new-privileges` and a read-only gateway. Don't put real customer data on it until backups and a restore test exist.
+- Known gaps for now: no SIEM-style alerting, containers not yet hardened beyond `no-new-privileges` and a read-only gateway, no platform backup. The full list is in [docs/SECURITY.md](docs/SECURITY.md). Don't put real customer data on it until the gaps listed in [docs/ROADMAP.md](docs/ROADMAP.md) are closed.
