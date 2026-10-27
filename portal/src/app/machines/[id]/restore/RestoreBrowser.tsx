@@ -5,7 +5,15 @@ import { runJob, startHeartbeat } from "@/lib/useJob";
 type Snap = { id: string; time: string; host: string; paths: string[] };
 type Entry = { name: string; path: string; type: "dir" | "file"; size: number };
 type Node = { path: string; state: "idle" | "loading" | "loaded" | "error"; open: boolean; kids: Entry[]; err?: string };
-type Hit = { snapshot: string; path: string; type: string; size: number };
+type Hit = { snapshot: string; path: string; type: string; size: number; mtime?: string | null };
+
+// Browsing and searching read the portal's catalog, which answers at once. Only a machine that has no catalogued backup yet
+// (its first backup finished minutes ago) falls back to asking the computer, which can take a minute.
+async function fromCatalog<T>(machineId: string, query: string): Promise<T> {
+  const res = await fetch(`/api/machines/${machineId}/catalog?${query}`);
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `request failed (${res.status})`);
+  return res.json();
+}
 
 const size = (n: number) => { if (!n) return ""; const u = ["B", "KB", "MB", "GB", "TB"]; const i = Math.min(4, Math.floor(Math.log(n) / Math.log(1024))); return `${(n / 1024 ** i).toFixed(i ? 1 : 0)} ${u[i]}`; };
 const inside = (a: string, b: string) => b === a || b.startsWith(a.endsWith("/") ? a : a + "/");   // a contains b
@@ -16,7 +24,8 @@ export default function RestoreBrowser({ machineId, machineName, mode }: { machi
   const [snap, setSnap] = useState<string>("");
   const [nodes, setNodes] = useState<Record<string, Node>>({});
   const [chosen, setChosen] = useState<string[]>([]);
-  const [msg, setMsg] = useState<{ kind: "info" | "bad" | "ok"; text: string } | null>({ kind: "info", text: "Connecting to the computer. This can take up to a minute..." });
+  const [msg, setMsg] = useState<{ kind: "info" | "bad" | "ok"; text: string } | null>({ kind: "info", text: "Loading backups..." });
+  const [live, setLive] = useState(false);
   const [hits, setHits] = useState<Hit[] | null>(null);
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
@@ -26,7 +35,12 @@ export default function RestoreBrowser({ machineId, machineName, mode }: { machi
   useEffect(() => startHeartbeat(machineId), [machineId]);
   useEffect(() => {
     if (started.current) return; started.current = true;
-    runJob<{ snapshots: Snap[] }>(machineId, "list_snapshots", {})
+    fromCatalog<{ snapshots: Snap[] }>(machineId, "view=snapshots")
+      .then(async (r) => {
+        if (r.snapshots.length) return r;
+        setLive(true); setMsg({ kind: "info", text: "Connecting to the computer. This can take up to a minute..." });
+        return runJob<{ snapshots: Snap[] }>(machineId, "list_snapshots", {});
+      })
       .then((r) => { setSnaps(r.snapshots); setMsg(r.snapshots.length ? null : { kind: "info", text: "There are no backups of this computer yet." }); if (r.snapshots[0]) setSnap(r.snapshots[0].id); })
       .catch((e) => setMsg({ kind: "bad", text: e.message }));
   }, [machineId]);
@@ -35,7 +49,8 @@ export default function RestoreBrowser({ machineId, machineName, mode }: { machi
     const key = `${sid}|${path}`;
     setNodes((n) => ({ ...n, [key]: { path, state: "loading", open: true, kids: n[key]?.kids ?? [] } }));
     try {
-      const r = await runJob<{ entries: Entry[] }>(machineId, "ls_snapshot", { snapshot: sid, path });
+      const r = live ? await runJob<{ entries: Entry[] }>(machineId, "ls_snapshot", { snapshot: sid, path })
+                     : await fromCatalog<{ entries: Entry[] }>(machineId, `view=ls&snapshot=${encodeURIComponent(sid)}&path=${encodeURIComponent(path)}`);
       const kids = [...r.entries].sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === "dir" ? -1 : 1));
       setNodes((n) => ({ ...n, [key]: { path, state: "loaded", open: true, kids } }));
       setMsg(null);
@@ -51,8 +66,9 @@ export default function RestoreBrowser({ machineId, machineName, mode }: { machi
 
   async function search() {
     if (!q.trim()) return;
-    setBusy(true); setHits(null); setChosen([]); setMsg({ kind: "info", text: "Searching every backup. This can take a minute..." });
-    try { const r = await runJob<{ hits: Hit[]; truncated: boolean }>(machineId, "find", { pattern: q.trim() }, { timeoutMs: 600_000 }); setHits(r.hits); setMsg(r.hits.length ? (r.truncated ? { kind: "info", text: "Showing the first 500 matches. Narrow the search to see others." } : null) : { kind: "info", text: "No files with that name were found in any backup." }); }
+    setBusy(true); setHits(null); setChosen([]); setMsg({ kind: "info", text: live ? "Searching every backup. This can take a minute..." : "Searching..." });
+    try { const r = live ? await runJob<{ hits: Hit[]; truncated: boolean }>(machineId, "find", { pattern: q.trim() }, { timeoutMs: 600_000 })
+                         : await fromCatalog<{ hits: Hit[]; truncated: boolean }>(machineId, `view=search&q=${encodeURIComponent(q.trim())}`); setHits(r.hits); setMsg(r.hits.length ? (r.truncated ? { kind: "info", text: "Showing the first 500 matches. Narrow the search to see others." } : null) : { kind: "info", text: "No files with that name were found in any backup." }); }
     catch (e) { setMsg({ kind: "bad", text: (e as Error).message }); }
     setBusy(false);
   }
@@ -122,11 +138,11 @@ export default function RestoreBrowser({ machineId, machineName, mode }: { machi
           </div>
           {hits && hits.length > 0 && (
             <div className="card">
-              <table><thead><tr><th /><th>File</th><th>Backup</th><th>Size</th></tr></thead><tbody>
+              <table><thead><tr><th /><th>File</th><th>Last changed</th><th>Newest backup with it</th><th>Size</th></tr></thead><tbody>
                 {hits.map((h) => {
                   const when = snaps?.find((s) => s.id === h.snapshot);
                   const disabled = !!searchSnap && searchSnap !== h.snapshot;
-                  return <tr key={h.snapshot + h.path}><td><input type="checkbox" checked={chosen.includes(h.path) && searchSnap === h.snapshot} disabled={disabled} onChange={() => toggle(h.path)} /></td><td>{nice(h.path)}</td><td className="muted">{when ? new Date(when.time).toLocaleString() : h.snapshot}</td><td className="muted">{size(h.size)}</td></tr>;
+                  return <tr key={h.snapshot + h.path}><td><input type="checkbox" checked={chosen.includes(h.path) && searchSnap === h.snapshot} disabled={disabled} onChange={() => toggle(h.path)} /></td><td>{nice(h.path)}</td><td className="muted">{h.mtime ? new Date(h.mtime).toLocaleString() : ""}</td><td className="muted">{when ? new Date(when.time).toLocaleString() : h.snapshot}</td><td className="muted">{size(h.size)}</td></tr>;
                 })}
               </tbody></table>
               <p className="muted small">Tick files from one backup at a time.</p>

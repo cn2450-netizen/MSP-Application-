@@ -58,6 +58,53 @@ export async function setSchedule(machineId: string, days: number[], time: strin
     [machineId, JSON.stringify(days), time, by]);
 }
 
+// ---- catalog: what each backup contains, read from the portal's own database (filled by scripts/backup-catalog.sh) ----
+
+export type CatalogSnapshot = { id: string; time: string; host: string; paths: string[] };
+export type CatalogEntry = { name: string; path: string; type: "dir" | "file"; size: number };
+export type CatalogHit = { snapshot: string; path: string; type: "dir" | "file"; size: number; mtime: string | null; taken_at: string };
+
+export async function catalogSnapshots(machineId: string): Promise<CatalogSnapshot[]> {
+  const rows = await q<{ snapshot_id: string; taken_at: string; paths: string[] }>(
+    "SELECT snapshot_id, taken_at, paths FROM catalog_snapshot WHERE machine_id = $1 ORDER BY taken_at DESC LIMIT 200", [machineId]);
+  return rows.map((r) => ({ id: r.snapshot_id, time: r.taken_at, host: "", paths: r.paths }));
+}
+
+const join = (parent: string, name: string) => (parent === "/" ? `/${name}` : `${parent}/${name}`);
+
+/** The direct children of one folder as it was in one backup. "/" is the list of drives. */
+export async function catalogLs(machineId: string, snapshot: string, path: string): Promise<{ entries: CatalogEntry[]; truncated: boolean }> {
+  const parent = path.length > 1 ? path.replace(/\/+$/, "") : "/";
+  const rows = await q<{ name: string; kind: string; size: string }>(
+    `SELECT f.name, f.kind, f.size
+       FROM catalog_file f
+       JOIN catalog_snapshot s ON s.machine_id = f.machine_id AND s.snapshot_id = $2 AND s.seq = ANY(f.snaps)
+      WHERE f.machine_id = $1 AND f.parent = $3
+      ORDER BY (f.kind = 'd') DESC, lower(f.name) LIMIT 5001`, [machineId, snapshot, parent]);
+  const truncated = rows.length > 5000;
+  return { truncated, entries: rows.slice(0, 5000).map((r) => ({ name: r.name, path: join(parent, r.name), type: r.kind === "d" ? "dir" : "file", size: Number(r.size) })) };
+}
+
+/** A file-name search. Plain text matches anywhere in the name; * and ? work as wildcards. One hit per distinct version. */
+export async function catalogSearch(machineId: string, pattern: string): Promise<{ hits: CatalogHit[]; truncated: boolean }> {
+  const esc = pattern.replace(/[\\%_]/g, "\\$&");
+  const like = /[*?]/.test(pattern) ? esc.replace(/\*/g, "%").replace(/\?/g, "_") : `%${esc}%`;
+  const rows = await q<{ parent: string; name: string; kind: string; size: string; mtime: string; snapshot_id: string; taken_at: string }>(
+    `SELECT f.parent, f.name, f.kind, f.size, f.mtime, s.snapshot_id, s.taken_at
+       FROM catalog_file f
+       CROSS JOIN LATERAL (SELECT s.snapshot_id, s.taken_at FROM catalog_snapshot s
+                            WHERE s.machine_id = f.machine_id AND s.seq = ANY(f.snaps) ORDER BY s.taken_at DESC LIMIT 1) s
+      WHERE f.machine_id = $1 AND f.name ILIKE $2
+      ORDER BY lower(f.name), f.parent, f.mtime DESC LIMIT 501`, [machineId, like]);
+  return {
+    truncated: rows.length > 500,
+    hits: rows.slice(0, 500).map((r) => ({
+      snapshot: r.snapshot_id, path: join(r.parent, r.name), type: r.kind === "d" ? "dir" : "file", size: Number(r.size),
+      mtime: r.kind === "d" ? null : r.mtime, taken_at: r.taken_at,
+    })),
+  };
+}
+
 /** Validates the parameters, then queues the job. Throws if they are not valid for that job type. */
 export async function createJob(machineId: string, type: JobType, params: unknown, requestedBy: string) {
   const clean = JobSchemas[type].parse(params);
