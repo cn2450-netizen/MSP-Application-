@@ -174,6 +174,27 @@ scripts/backup-remove-machine.sh acme main dc01 --delete-backups   # PERMANENT: 
 
 The repository password in that credentials file is the only way to read the backups: copy it to your vault. Retention and pruning are done on the VM against the local NAS path (never through the append-only server). The container refuses to start unless the NAS marker file is visible, so it can never write to the VM's disk. Put it behind NPM at `backup.<domain>` (WebSockets not needed; set `client_max_body_size 0;`, `proxy_request_buffering off;`, `proxy_read_timeout 600s;`; use a DNS-only Cloudflare record, since proxying large backup uploads through Cloudflare is limited and against its terms for non-web content).
 
+### Backing up a Windows machine
+
+```bash
+scripts/backup-add-machine.sh acme main dc01                                  # once per machine (see above)
+scripts/build-backup-installer.sh acme main dc01 [--paths 'D:\Data;E:\Shares'] [--time 02:30]
+# -> generated/agents/acme/main/backup/install-backup-dc01.ps1 (holds that machine's credentials: deliver securely, delete after use)
+```
+
+Run it elevated on the machine (`-RunNow` for a first backup). It installs the pinned restic, tests the login, and schedules `\MSP\MSPBackup` daily (SYSTEM, VSS so open files are consistent). Default scope is every fixed drive minus `agent/backup/windows/excludes.txt` (OS, programs, caches); add per-site rules in `agent/backup/windows/excludes.site/<customer>-<site>.txt`. In exclude files a literal `$` must be written `[$]` (restic expands `$NAME`, and an empty expansion excludes everything). A backup that stores 0 files is reported as failed. The result is shipped by the monitoring agent to the **Backups** panel of the customer's dashboard.
+
+### Maintenance, verification and restore
+
+```bash
+sudo scripts/install-backup-maintenance.sh [10:00]   # daily timer (msp-backup-maintain): run once
+sudo scripts/backup-maintain.sh [--machine acme-main-dc01] [--no-prune] [--no-restore-test]
+sudo scripts/backup-restore.sh acme main dc01 --list
+sudo scripts/backup-restore.sh acme main dc01 --target dc01-fix --path /C/Data/Finance   # -> /srv/msp/restore/dc01-fix
+```
+
+The daily job, per machine, on the NAS path: fails if the newest snapshot is older than 36 h (a silently dead agent); prunes to 7 daily / 4 weekly / 6 monthly (deferred while the machine is uploading, since clients do not lock); `restic check` plus a rotating 1/7 of all data re-read each day (everything verified weekly); and restores 3 random files from the newest snapshot and verifies them. Any failure leaves `msp-backup-maintain.service` failed. Restores go only to the encrypted data volume, need the customer name typed to confirm, and are logged to `generated/backup/restore-audit.log`. Delete restored data once delivered.
+
 ## Agent footprint and outage buffering
 
 Measured on Telegraf 1.40.2 / Windows: the program is ~315 MB on disk (the agent log is capped at ~20 MB); an idle agent uses ~97 MB of RAM. Collected data is **never written to disk**: during an outage it waits in RAM (200,000 metrics, ~66 hours, ~140 MB; 5,000 event-log entries, ~85 MB), oldest dropped first when full. Both buffers completely full is ~330 MB (~500 MB allowing for Go GC slack), well inside a 1 GB ceiling. A restart or reboot during an outage loses what is buffered, and event-log entries written while the agent is stopped are not sent. Costs per item are in the comments of `agent/windows/telegraf.conf.tmpl`; re-measure before raising the limits.
