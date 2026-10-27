@@ -60,7 +60,7 @@ restore_test() {
   local tmp snap
   tmp="$(mktemp -d /srv/msp/restore-test.XXXXXX)" || fail "cannot create a restore-test directory"
   chmod 700 "$tmp"
-  snap="$(restic snapshots --latest 1 --json 2>/dev/null | jq -r '.[0].short_id // empty')"
+  snap="$(restic snapshots --json 2>/dev/null | jq -r 'sort_by(.time) | last | .short_id // empty')"   # newest of all, whatever its paths
   [[ -n "$snap" ]] || { rm -rf -- "$tmp"; fail "no snapshot to test"; }
   restic restore "$snap" --target "$tmp" --include '**/stage/postgres.sql' --include '**/secrets' >/dev/null 2>&1 \
     || { rm -rf -- "$tmp"; fail "restore of snapshot ${snap} failed"; }
@@ -74,8 +74,8 @@ restore_test() {
 
 if [[ "$mode" == rtest ]]; then restore_test; exit $?; fi
 
-STAGE="$(mktemp -d /srv/msp/platform-stage.XXXXXX)" || fail "cannot create a staging directory"
-chmod 700 "$STAGE"
+STAGE=/srv/msp/platform-stage   # fixed name so every snapshot has the same paths (and retention groups them together)
+rm -rf -- "$STAGE"; mkdir -m 700 "$STAGE" || fail "cannot create the staging directory"
 trap 'rm -rf -- "$STAGE"' EXIT
 mkdir -p "$STAGE/stage/influx"
 
