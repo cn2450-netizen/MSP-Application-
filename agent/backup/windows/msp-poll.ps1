@@ -15,13 +15,13 @@ Set-ResticEnv $cfg
 $lastRunFile = Join-Path $Root 'last-run.json'
 $policyFile  = Join-Path $Root 'policy.json'
 $taskName = 'MSPBackup'; $taskPath = '\MSP\'
-$loopUntil = (Get-Date).AddMinutes(15)       # a single run never lasts longer than this (the next minute starts a new one)
+$loopUntil = (Get-Date).AddHours(6)          # a single run never lasts longer than this (the next minute starts a new one)
 
 function Invoke-Portal([string] $Path, $Body) {
     $json = $Body | ConvertTo-Json -Depth 12 -Compress
     return Invoke-RestMethod -Method Post -Uri ($cfg.portal_url.TrimEnd('/') + $Path) `
         -Headers @{ Authorization = 'Bearer ' + $cfg.agent_token } -ContentType 'application/json; charset=utf-8' `
-        -Body ([Text.Encoding]::UTF8.GetBytes($json)) -TimeoutSec 30 -UseBasicParsing
+        -Body ([Text.Encoding]::UTF8.GetBytes($json)) -TimeoutSec 50 -UseBasicParsing
 }
 
 function Get-BackupRunning {
@@ -196,16 +196,27 @@ function Set-BackupSchedule($Sched) {
     Write-Log ("backup schedule updated by the portal (version {0}): days {1} at {2}" -f [int]$Sched.version, ($days -join ','), $Sched.time)
 }
 
+# "Seen" = the newest version the portal has told us about, applied or not. It is what we report back, so the portal does
+# not cut its wait short again and again for a change that cannot be applied (the schedule is retried every 10 minutes).
+$policySeen = $policyVersion; $scheduleSeen = $scheduleVersion; $scheduleRetryAfter = Get-Date
+
+# The portal holds each check-in open for up to ~25 seconds and answers the moment there is a job or a changed setting,
+# so a click in the portal reaches this computer within a second or so. This script keeps looping for a few hours; the
+# every-minute task then starts a fresh copy (a copy that is still running makes the new one exit at once).
 do {
-    $body = @{ agent_version = $script:AgentVersion; os = $os }
+    $started = Get-Date
+    $running = Get-BackupRunning
+    $body = @{ agent_version = $script:AgentVersion; os = $os; wait = $true; busy = [bool]$running
+               policy_version = $policySeen; schedule_version = $scheduleSeen }
     if (Test-Path $lastRunFile) { try { $body.last_run = (Get-Content -Raw $lastRunFile | ConvertFrom-Json) } catch { } }
     $body.progress = $null
-    if (Get-BackupRunning) { $pr = Get-ResticProgress (Join-Path $Work 'backup.out'); if ($pr) { $body.progress = $pr } }
+    if ($running) { $pr = Get-ResticProgress (Join-Path $Work 'backup.out'); if ($pr) { $body.progress = $pr } }
 
     try { $reply = Invoke-Portal '/api/agent/poll' $body }
     catch { Write-Log ("check-in failed: {0}" -f $_.Exception.Message); exit 0 }
 
     if ($reply.policy -and [int]$reply.policy.version -ne $policyVersion) {
+        $policySeen = [int]$reply.policy.version
         $inc = @($reply.policy.include | Where-Object { Test-DrivePath $_ })
         if ($inc.Count -gt 0) {
             $tmp = "$policyFile.tmp"
@@ -216,11 +227,14 @@ do {
         }
     }
     if ($reply.schedule -and [int]$reply.schedule.version -ne $scheduleVersion) {
-        try { Set-BackupSchedule $reply.schedule; $scheduleVersion = [int]$reply.schedule.version }
-        catch { Write-Log ("could not apply the backup schedule (will retry): {0}" -f $_.Exception.Message) }
+        $scheduleSeen = [int]$reply.schedule.version
+        if ((Get-Date) -ge $scheduleRetryAfter) {
+            try { Set-BackupSchedule $reply.schedule; $scheduleVersion = [int]$reply.schedule.version }
+            catch { Write-Log ("could not apply the backup schedule (will retry in 10 minutes): {0}" -f $_.Exception.Message); $scheduleRetryAfter = (Get-Date).AddMinutes(10) }
+        }
     }
     if ($reply.job) { Invoke-AgentJob $reply.job }
-    if (-not $reply.interactive -and -not $reply.job) { break }
-    Start-Sleep -Seconds 3
+    # an answer that came back at once with nothing to do (an older portal, or an error page) must not become a busy loop
+    if (-not $reply.job -and ((Get-Date) - $started).TotalSeconds -lt 2) { Start-Sleep -Seconds 2 }
 } while ((Get-Date) -lt $loopUntil)
 exit 0

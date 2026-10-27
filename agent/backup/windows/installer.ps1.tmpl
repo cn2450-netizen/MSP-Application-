@@ -84,6 +84,9 @@ Start-Transcript -Path (Join-Path $logDir 'install.log') -Append | Out-Null
 try {
     $taskPath = '\MSP\'
     $existing = Get-ScheduledTask -TaskName $TaskName -TaskPath $taskPath -ErrorAction SilentlyContinue
+    # The check-in script keeps running for hours, so stop the old copy: the files below are replaced and the new one
+    # starts within a minute (it is only started again when the poll task is registered further down).
+    Stop-ScheduledTask -TaskName $PollTaskName -TaskPath $taskPath -ErrorAction SilentlyContinue
 
     if ($Uninstall) {
         if ($existing) { Unregister-ScheduledTask -TaskName $TaskName -TaskPath $taskPath -Confirm:$false }

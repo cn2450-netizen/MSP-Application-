@@ -28,7 +28,16 @@ const Body = z.object({
     bytes_done: num.optional(),
     total_bytes: num.optional(),
   }).nullable().optional(),
+  // Long-poll: hold the request open until there is something to hand over (a job, or a changed folder choice/schedule).
+  // busy = a backup is running, so answer sooner to keep its progress bar moving.
+  wait: z.boolean().optional(),
+  busy: z.boolean().optional(),
+  policy_version: z.number().int().optional(),
+  schedule_version: z.number().int().optional(),
 }).strict();
+
+const HOLD_MS = 25_000, HOLD_BUSY_MS = 3_000;   // below the 60 s default read timeout of the reverse proxy in front of the portal
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // The agent's heartbeat: it reports its state, and is handed its backup policy and at most one job.
 export async function POST(req: Request) {
@@ -61,22 +70,31 @@ export async function POST(req: Request) {
   await q("UPDATE job SET status = 'expired', finished_at = now() WHERE machine_id = $1 AND status = 'queued' AND expires_at < now()", [agent.id]);
   await q("UPDATE job SET status = 'failed', error = 'the machine stopped responding', finished_at = now() WHERE machine_id = $1 AND status = 'running' AND updated_at < now() - interval '2 hours'", [agent.id]);
 
-  const policy = await q1<{ include_paths: string[]; version: number }>("SELECT include_paths, version FROM policy WHERE machine_id = $1", [agent.id]);
-  const schedule = await q1<{ days: number[]; at_time: string; version: number }>("SELECT days, at_time, version FROM schedule WHERE machine_id = $1", [agent.id]);
-  const m = await q1<{ interactive: boolean }>("SELECT (interactive_until IS NOT NULL AND interactive_until > now()) AS interactive FROM machine WHERE id = $1", [agent.id]);
+  // Agents that ask to wait are held here until there is something for them; others get an answer straight away.
+  const deadline = Date.now() + (body.wait ? (body.busy ? HOLD_BUSY_MS : HOLD_MS) : 0);
+  for (;;) {
+    const policy = await q1<{ include_paths: string[]; version: number }>("SELECT include_paths, version FROM policy WHERE machine_id = $1", [agent.id]);
+    const schedule = await q1<{ days: number[]; at_time: string; version: number }>("SELECT days, at_time, version FROM schedule WHERE machine_id = $1", [agent.id]);
 
-  // One job at a time: hand out the next only if none is running (long jobs run inside the agent's own poll).
-  const job = await q1<{ id: string; type: string; params: unknown }>(
-    `UPDATE job SET status = 'running', started_at = now(), updated_at = now()
-      WHERE id = (SELECT id FROM job WHERE machine_id = $1 AND status = 'queued' AND expires_at > now()
-                    AND NOT EXISTS (SELECT 1 FROM job r WHERE r.machine_id = $1 AND r.status = 'running' AND r.type <> 'backup_now')
-                   ORDER BY requested_at LIMIT 1 FOR UPDATE SKIP LOCKED)
-      RETURNING id, type, params`, [agent.id]);
+    // One job at a time: hand out the next only if none is running (long jobs run inside the agent's own poll).
+    const job = await q1<{ id: string; type: string; params: unknown }>(
+      `UPDATE job SET status = 'running', started_at = now(), updated_at = now()
+        WHERE id = (SELECT id FROM job WHERE machine_id = $1 AND status = 'queued' AND expires_at > now()
+                      AND NOT EXISTS (SELECT 1 FROM job r WHERE r.machine_id = $1 AND r.status = 'running' AND r.type <> 'backup_now')
+                     ORDER BY requested_at LIMIT 1 FOR UPDATE SKIP LOCKED)
+        RETURNING id, type, params`, [agent.id]);
 
-  return NextResponse.json({
-    interactive: !!m?.interactive,
-    policy: policy ? { version: policy.version, include: policy.include_paths } : null,
-    schedule: schedule ? { version: schedule.version, days: schedule.days, time: schedule.at_time } : null,
-    job: job ?? null,
-  });
+    const changed = (body.policy_version !== undefined && !!policy && policy.version !== body.policy_version)
+                 || (body.schedule_version !== undefined && !!schedule && schedule.version !== body.schedule_version);
+    if (job || changed || Date.now() >= deadline || req.signal.aborted) {
+      const m = await q1<{ interactive: boolean }>("SELECT (interactive_until IS NOT NULL AND interactive_until > now()) AS interactive FROM machine WHERE id = $1", [agent.id]);
+      return NextResponse.json({
+        interactive: !!m?.interactive,      // only agents older than 0.4.0 look at this
+        policy: policy ? { version: policy.version, include: policy.include_paths } : null,
+        schedule: schedule ? { version: schedule.version, days: schedule.days, time: schedule.at_time } : null,
+        job: job ?? null,
+      });
+    }
+    await sleep(1000);
+  }
 }

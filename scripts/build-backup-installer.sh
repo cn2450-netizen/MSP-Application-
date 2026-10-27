@@ -14,10 +14,10 @@ set -a; source .env; source agent/backup/version.env; set +a
 cust="${1:?usage: build-backup-installer.sh <customer> <site> <hostname> [--paths 'C:\\a;D:\\b'] [--time HH:MM]}"
 site="${2:?site required}"
 host="$(tr 'A-Z_' 'a-z-' <<<"${3:?hostname required}")"; shift 3
-paths="ALL" when=""
+paths="ALL" when="" paths_given=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --paths) paths="${2:?--paths needs a value}"; shift 2;;
+    --paths) paths="${2:?--paths needs a value}"; paths_given=1; shift 2;;
     --time)  when="${2:?--time needs HH:MM}"; shift 2;;
     *) echo "unknown option $1" >&2; exit 2;;
   esac
@@ -26,6 +26,12 @@ done
 [[ -z "$when" || "$when" =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]] || { echo "--time must be HH:MM" >&2; exit 2; }
 cred="generated/backup/credentials/${cust}/${site}/${host}.txt"
 [[ -f "$cred" ]] || { echo "no credentials for ${cust}/${site}/${host}: run scripts/backup-add-machine.sh ${cust} ${site} ${host}" >&2; exit 1; }
+
+# The scope chosen at install time is remembered per machine, so rebuilding the installer to upgrade an agent (without
+# --paths) keeps it instead of silently widening it to every drive. "--paths ALL" is how to go back to everything.
+scope_file="${cred%.txt}.scope"
+if [[ "$paths_given" == 0 && -s "$scope_file" ]]; then paths="$(cat "$scope_file")"; fi
+(umask 077; printf '%s' "$paths" > "$scope_file")
 
 # Portal check-in: needs the portal address and a per-machine token. Best-effort: without them the installer still
 # schedules the daily backup, it just cannot be managed from the portal.

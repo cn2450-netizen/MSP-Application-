@@ -1,6 +1,6 @@
 # Shared helpers for the MSP backup agent scripts (dot-sourced by msp-backup.ps1 and msp-poll.ps1).
 # ASCII only: Windows PowerShell 5.1 mis-reads UTF-8 scripts that have no byte-order mark.
-$script:AgentVersion = '0.3.0'
+$script:AgentVersion = '0.4.0'
 $script:Root    = $PSScriptRoot
 $script:Restic  = Join-Path $Root 'restic.exe'
 $script:LogFile = Join-Path $Root 'backup.log'

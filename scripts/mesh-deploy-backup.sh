@@ -53,11 +53,15 @@ while read -r dev; do
   host="$(tr 'A-Z_' 'a-z-' <<<"$name")"
   echo; echo "== ${name}"
   installer="generated/agents/${cust}/${site}/backup/install-backup-${host}.ps1"
-  if [[ "$register" == 1 ]]; then
-    if ! awk -F'\t' -v c="$cust" -v s="$site" -v h="$host" '$1==c && $2==s && $3==h{f=1} END{exit !f}' generated/backup/machines.tsv 2>/dev/null; then
-      scripts/backup-add-machine.sh "$cust" "$site" "$host" >/dev/null || { echo "  could not register ${host}"; failed=$((failed+1)); continue; }
-      echo "  registered ${host} for backup"
-    fi
+  registered=0
+  awk -F'\t' -v c="$cust" -v s="$site" -v h="$host" '$1==c && $2==s && $3==h{f=1} END{exit !f}' generated/backup/machines.tsv 2>/dev/null && registered=1
+  if [[ "$register" == 1 && "$registered" == 0 ]]; then
+    scripts/backup-add-machine.sh "$cust" "$site" "$host" >/dev/null || { echo "  could not register ${host}"; failed=$((failed+1)); continue; }
+    echo "  registered ${host} for backup"; registered=1
+  fi
+  # Always build a fresh installer for a registered machine, so an upgrade carries the current agent scripts (an old
+  # installer file would re-install the old agent). The machine's scope is kept unless --paths is given.
+  if [[ "$registered" == 1 ]]; then
     scripts/build-backup-installer.sh "$cust" "$site" "$host" ${paths:+--paths "$paths"} >/dev/null || { echo "  could not build the installer"; failed=$((failed+1)); continue; }
   fi
   if [[ ! -f "$installer" ]]; then
