@@ -69,6 +69,11 @@ Scripts that touch MeshCentral need a short-lived login token because there is n
 - **Each computer's repository password**: in its credentials file and in your vault. Without it its backups cannot be read.
 - Admin sudo requires a password (passwordless sudo removed); scripts that use `sudo` need an interactive session.
 
-## Not yet backed up
+## Platform backup
 
-The platform itself (databases and the app directory on the LUN) has no backup yet. The data volume is a SAN LUN, which protects against a lost VM but not against a lost or corrupted SAN. A proper platform backup is on the [roadmap](ROADMAP.md).
+`msp-platform-backup.timer` runs `scripts/backup-platform.sh` daily at 03:30 (install with `sudo scripts/install-platform-backup.sh`, once, after `sudo scripts/backup-platform.sh --init`). It saves a full database dump, an InfluxDB backup, `secrets/`, `generated/`, `config/`, `.env`, and the authentik, Grafana, MeshCentral and Influx config data to `/srv/msp-backups/_platform`, keeps 7 daily / 4 weekly / 6 monthly, runs `restic check` on a rotating subset, and restores the newest snapshot to prove the dump is complete. A failure leaves the service failed: `systemctl status msp-platform-backup`; the last result is in `generated/backup/platform.status`.
+
+- **The repository password** is shown once by `--init`. It must be in your vault: the copy in `secrets/` is lost with the VM.
+- **Not included:** Loki logs, the customer repositories (they have their own checks), and the LUKS key (vault only).
+- **Rebuild from it:** bootstrap a new VM, then `restic -r /srv/msp-backups/_platform restore latest --target /` with the repository password, restore the database with `psql < postgres.sql` and Influx with `influx restore`. A full rehearsal is still on the [roadmap](ROADMAP.md).
+- The NAS is the only place it is stored. An off-site copy comes with the cold tier.

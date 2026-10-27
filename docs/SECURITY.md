@@ -49,7 +49,7 @@ These are tracked in [ROADMAP.md](ROADMAP.md). Close the first group before real
 2. HSTS on the remaining hosts; self-service password reset and mail.
 3. AD (LDAPS) source in authentik.
 4. Security scan, hard power-off test and a load test.
-5. Platform backup (the platform has no backup of its own yet).
+5. Platform backup is on the NAS only: add an off-site copy and rehearse a full rebuild from it.
 6. Catalog file names are plain in the database. Per-customer encryption of names is a possible later step.
 7. Agent tokens are per site for monitoring, so one key is shared by the PCs of a site.
 8. The installer is a PowerShell script, not a signed MSI/EXE.

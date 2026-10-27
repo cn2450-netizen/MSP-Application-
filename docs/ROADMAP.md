@@ -10,6 +10,7 @@
 
 ## Done
 
+- Platform backup: databases, InfluxDB, secrets, config and app data to the NAS daily 03:30, with retention, integrity check and a restore proof (`scripts/backup-platform.sh`). Still to do: rehearse a full rebuild from it, and add an off-site copy.
 - Lab passwords rotated and passwordless sudo removed (verified: sudo now asks for a password).
 
 ## Before real customer data goes on the system
@@ -21,7 +22,6 @@
 | Self-service password reset and mail (SMTP) | No recovery flow today; an admin removes the authenticator for lost phones |
 | AD source (LDAPS) for staff | Staff are currently local authentik users |
 | Security scan, hard power-off test, load test | Not run yet |
-| Platform backup (databases, secrets, app directory) | The platform itself has no backup; the NAS copy covers customer data only |
 | HIPAA/BAA review, risk analysis, customer agreements | Compliance work only you can do |
 | Approve-by-second-technician test through the real UI | Needs a second staff account; only tested at the database level |
 | Replace onto a genuinely different computer | Tested only for a rebuild under the same name |
@@ -39,7 +39,7 @@ Use [ONBOARDING.md](ONBOARDING.md). Watch the internet link, first-backup durati
 | 2 | SNMP polling and traps, syslog, network dashboards |
 | 3 | Ticketing: custom app on Postgres, alert-to-ticket, recurring-problem detection |
 | Backup | Wasabi cold tier (`restic copy` of long-lived monthly snapshots; check BAA, Object Lock, 90-day minimum) |
-| Backup | Platform (VM) backup |
+| Backup | Off-site copy of the platform backup (with the Wasabi tier) |
 | Backup | Fleet-wide search page for staff; "waiting for the computer" status from an applied-schedule version |
 | Backup | Per-customer encryption of catalog file names |
 | Agent | Signed MSI/EXE installer; per-device enrolment tokens; uninstall test |
