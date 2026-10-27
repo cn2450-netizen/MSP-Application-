@@ -69,7 +69,28 @@ These are tracked in [ROADMAP.md](ROADMAP.md). Close the first group before real
 | HSTS on the public hosts | NPM now sends it on the authentik, ingest, backup, Mesh and portal hosts (checked 2026-10-27). Still missing on the dashboards (Grafana) host's redirect response |
 | SSH allows password login, root login with a key, and X11 forwarding | Open: key login is the only one in use; disable password login and root login |
 | The admin account is in the `docker` group (root-equivalent) | Accepted for the admin; keep it to named admins |
-| Container image CVE scan, authenticated web testing, load test, hard power-off test | Not done |
+| Container image CVE scan | Done 2026-10-27, see below: all nine images have known HIGH findings; the old ones carry CRITICAL ones. Updates needed |
+| Authenticated web testing, load test, hard power-off test | Not done |
+
+### Container image scan, 2026-10-27
+
+Trivy 0.75.0 (database of the same day) against the images the stack runs. Vulnerabilities only, no secret or config scan. Counts include findings that have no fix yet.
+
+| Image | Critical | High | Notes |
+|---|---|---|---|
+| Grafana 11.4.0 (23 months old) | 9 | 144 | Go standard library, OpenSSL, grpc, pgx, kin-openapi |
+| InfluxDB 2.7 | 18 | 324 | Go 1.18-1.23 toolchains inside the binary, Debian 12 packages |
+| MeshCentral 1.2.1 (our build) | 5 | 98 | handlebars, tar, proxy-addr, nodejs, postgresql client |
+| restic rest-server 0.14.0 (17 months old) | 3 | 90 | Go standard library, OpenSSL |
+| nginx-unprivileged 1.27-alpine (gateway) | 2 | 56 | OpenSSL (CVE-2026-31789), libexpat, curl |
+| Loki 3.3.2 (22 months old) | 2 | 58 | Go standard library, grpc |
+| authentik 2026.8.4 | 3 | 71 | libxml2, certifi (fix 2026.10.18), util-linux |
+| postgres 16-alpine | 1 | 25 | Go standard library in the bundled helper |
+| portal (our build) | 0 | 11 | npm build tooling packages only |
+
+Most findings are in old base images and in Go standard-library versions that a newer image release fixes. Which matter most depends on exposure: the gateway (nginx), the backup server (rest-server) and MeshCentral accept traffic from the internet through NPM, so they come first; Grafana, Loki and InfluxDB are reachable only behind authentik, NPM and the host firewall, or on the internal network. Whether a given CVE is reachable in this setup has not been analysed. A finding is a reason to update, not proof of compromise.
+
+Reports are kept outside the repository. Re-run after every update; see ROADMAP.md.
 
 ## Reporting and review
 

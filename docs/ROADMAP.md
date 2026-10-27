@@ -23,7 +23,8 @@
 | SSH hardening on the VM | Disable password login and root login, turn off X11 forwarding (key login is the only one in use) |
 | Self-service password reset and mail (SMTP) | No recovery flow today; an admin removes the authenticator for lost phones |
 | AD source (LDAPS) for staff | Staff are currently local authentik users |
-| Security scan, hard power-off test, load test | Not run yet |
+| Update container images (scan found HIGH/CRITICAL in all nine) | Order: gateway nginx, rest-server, MeshCentral rebuild, authentik, Grafana, Loki, InfluxDB, postgres. Run isolation tests and re-scan after each |
+| Hard power-off test, load test, authenticated web testing | Not run yet |
 | HIPAA/BAA review, risk analysis, customer agreements | Compliance work only you can do |
 | Approve-by-second-technician test through the real UI | Needs a second staff account; only tested at the database level |
 | Replace onto a genuinely different computer | Tested only for a rebuild under the same name |
