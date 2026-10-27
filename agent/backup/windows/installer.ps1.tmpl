@@ -164,6 +164,9 @@ try {
         # The check-in task: every minute, outbound HTTPS only. It lets the portal show status, change the folder choice,
         # list/search/restore backups and start a backup on demand. Skipped when this installer has no portal address.
         if ($PortalUrl -and $AgentToken) {
+            # Stop again now that the new scripts are in place: the every-minute trigger may have started a copy of the OLD
+            # script since the first stop, and that copy would keep running its old code for hours.
+            Stop-ScheduledTask -TaskName $PollTaskName -TaskPath $taskPath -ErrorAction SilentlyContinue
             $pAction   = New-ScheduledTaskAction -Execute 'powershell.exe' `
                            -Argument ('-NoProfile -ExecutionPolicy Bypass -File "{0}"' -f (Join-Path $InstallDir 'msp-poll.ps1'))
             $pTrigger  = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 1) -RepetitionDuration (New-TimeSpan -Days 3650)

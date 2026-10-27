@@ -24,7 +24,7 @@ export default async function RestorePage({ params, searchParams }: { params: Pr
         {staff && mode === "browse" && <> <a href={`/machines/${m.id}/restore?mode=search`}>Search by file name instead</a>.</>}
         {mode === "search" && <> <a href={`/machines/${m.id}/restore`}>Browse by date instead</a>.</>}
       </p>
-      <RestoreBrowser machineId={m.id} machineName={m.display_name || m.name} mode={mode} />
+      <RestoreBrowser machineId={m.id} machineName={m.display_name || m.name} mode={mode} staff={staff} />
     </>
   );
 }

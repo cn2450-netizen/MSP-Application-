@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { runJob, startHeartbeat } from "@/lib/useJob";
+import FolderChooser from "./FolderChooser";
 
 type Snap = { id: string; time: string; host: string; paths: string[] };
 type Entry = { name: string; path: string; type: "dir" | "file"; size: number };
@@ -19,7 +20,10 @@ const size = (n: number) => { if (!n) return ""; const u = ["B", "KB", "MB", "GB
 const inside = (a: string, b: string) => b === a || b.startsWith(a.endsWith("/") ? a : a + "/");   // a contains b
 const nice = (p: string) => { const m = /^\/([A-Za-z])(\/.*)?$/.exec(p); return m ? `${m[1].toUpperCase()}:${(m[2] ?? "/").replace(/\//g, "\\")}` : p; };
 
-export default function RestoreBrowser({ machineId, machineName, mode }: { machineId: string; machineName: string; mode: "browse" | "search" }) {
+export default function RestoreBrowser({ machineId, machineName, mode, staff }: { machineId: string; machineName: string; mode: "browse" | "search"; staff: boolean }) {
+  const [target, setTarget] = useState<"safe" | "folder" | "original">("safe");
+  const [folder, setFolder] = useState("");
+  const [replace, setReplace] = useState(false);
   const [snaps, setSnaps] = useState<Snap[] | null>(null);
   const [snap, setSnap] = useState<string>("");
   const [nodes, setNodes] = useState<Record<string, Node>>({});
@@ -78,15 +82,20 @@ export default function RestoreBrowser({ machineId, machineName, mode }: { machi
 
   async function restore() {
     if (!restoreSnap || chosen.length === 0) return;
+    if (target === "folder" && !folder) { setMsg({ kind: "bad", text: "Choose the folder to restore into." }); return; }
     const when = snaps?.find((s) => s.id === restoreSnap || restoreSnap.startsWith(s.id));
-    if (!confirm(`Restore ${chosen.length} item${chosen.length === 1 ? "" : "s"} from the backup of ${when ? new Date(when.time).toLocaleString() : restoreSnap} onto ${machineName}?\n\nThey will be put in a new folder; nothing is overwritten.`)) return;
+    const where = target === "safe" ? "They will be put in a new folder; nothing is overwritten."
+      : target === "folder" ? `They will be put in ${folder}. ${replace ? "Files that already exist there WILL BE REPLACED." : "Files that already exist there are kept."}`
+      : `They will be put back in their original locations. ${replace ? "Files that already exist WILL BE REPLACED." : "Files that already exist are kept."}`;
+    if (!confirm(`Restore ${chosen.length} item${chosen.length === 1 ? "" : "s"} from the backup of ${when ? new Date(when.time).toLocaleString() : restoreSnap} onto ${machineName}?\n\n${where}`)) return;
     setBusy(true); setPct(0); setMsg({ kind: "info", text: "Contacting the computer..." });
     try {
-      const r = await runJob<{ target: string; files: number }>(machineId, "restore", { snapshot: restoreSnap, items: chosen }, {
+      const params = { snapshot: restoreSnap, items: chosen, ...(target !== "safe" ? { target, overwrite: replace ? "always" : "never" } : {}), ...(target === "folder" ? { folder } : {}) };
+      const r = await runJob<{ target: string; files: number }>(machineId, "restore", params, {
         timeoutMs: 6 * 3600_000, onStatus: (s) => { if (s === "running") setMsg({ kind: "info", text: "Restoring..." }); },
         onProgress: (p) => { if (typeof p.percent_done === "number") setPct(p.percent_done); },
       });
-      setMsg({ kind: "ok", text: `Done. ${r.files} file${r.files === 1 ? "" : "s"} restored to ${r.target} on ${machineName}. An administrator can open that folder.` });
+      setMsg({ kind: "ok", text: `Done. ${r.files} file${r.files === 1 ? "" : "s"} restored to ${r.target} on ${machineName}.${target === "safe" ? " An administrator can open that folder." : ""}` });
       setChosen([]);
     } catch (e) { setMsg({ kind: "bad", text: (e as Error).message }); }
     setBusy(false); setPct(null);
@@ -152,9 +161,23 @@ export default function RestoreBrowser({ machineId, machineName, mode }: { machi
       )}
 
       {chosen.length > 0 && (
-        <div className="card row">
-          <div className="grow"><strong>{chosen.length} selected</strong><div className="muted small">{chosen.slice(0, 3).map(nice).join(", ")}{chosen.length > 3 ? ` and ${chosen.length - 3} more` : ""}</div></div>
-          <button className="primary" onClick={restore} disabled={busy || !restoreSnap}>Restore to a new folder</button>
+        <div className="card">
+          <div><strong>{chosen.length} selected</strong><div className="muted small">{chosen.slice(0, 3).map(nice).join(", ")}{chosen.length > 3 ? ` and ${chosen.length - 3} more` : ""}</div></div>
+          <h3 style={{ margin: "14px 0 6px", fontSize: 15 }}>Where should they go?</h3>
+          <label style={{ display: "block", margin: "4px 0" }}><input type="radio" name="target" checked={target === "safe"} onChange={() => setTarget("safe")} disabled={busy} />{" "}
+            A new folder on the computer <span className="muted small">(safest; only an administrator can open it)</span></label>
+          <label style={{ display: "block", margin: "4px 0" }}><input type="radio" name="target" checked={target === "folder"} onChange={() => setTarget("folder")} disabled={busy} />{" "}
+            A folder I choose</label>
+          {staff && <label style={{ display: "block", margin: "4px 0" }}><input type="radio" name="target" checked={target === "original"} onChange={() => setTarget("original")} disabled={busy} />{" "}
+            Back where they came from <span className="muted small">(technicians only)</span></label>}
+          {target === "folder" && <FolderChooser machineId={machineId} onChange={setFolder} />}
+          {target !== "safe" && (
+            <label style={{ display: "block", margin: "8px 0" }}><input type="checkbox" checked={replace} onChange={(e) => setReplace(e.target.checked)} disabled={busy} />{" "}
+              Replace files that already exist there <span className="muted small">(otherwise they are left alone)</span></label>
+          )}
+          <div style={{ marginTop: 12 }}>
+            <button className="primary" onClick={restore} disabled={busy || !restoreSnap || (target === "folder" && !folder)}>Restore</button>
+          </div>
         </div>
       )}
     </div>

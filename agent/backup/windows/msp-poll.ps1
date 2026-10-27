@@ -118,35 +118,98 @@ function Job-Find($p) {
     return @{ pattern = [string]$p.pattern; hits = @($hits); truncated = ($hits.Count -ge 500) }
 }
 
+# Same rules as the portal (restoreFolderProblem in portal/src/lib/jobs.ts): this agent writes as SYSTEM, so a restore may
+# never go into Windows, program folders, ProgramData, any AppData (Startup lives there) or a whole drive. Names only.
+function Test-RestoreName([string] $Path) {
+    $m = [regex]::Match($Path.TrimEnd('\'), '^([A-Za-z]):\\(.+)$')
+    if (-not $m.Success) { return $false }
+    $parts = $m.Groups[2].Value.Split('\')
+    $first = $parts[0].ToLower()
+    if (@('windows', 'program files', 'program files (x86)', 'programdata', 'system volume information', 'recovery', '$recycle.bin', 'msp-backup') -contains $first) { return $false }
+    if ($first -eq 'users') {
+        if ($parts.Count -ge 2 -and $parts[1].ToLower() -eq 'default') { return $false }
+        for ($i = 2; $i -lt $parts.Count; $i++) { if ($parts[$i].ToLower() -eq 'appdata') { return $false } }
+    }
+    return $true
+}
+# A chosen folder: the name rules, and no part of it may be a junction or symbolic link (it could lead somewhere else).
+function Test-RestoreFolder([string] $Path) {
+    if (-not (Test-DrivePath $Path) -or -not (Test-RestoreName $Path)) { return $false }
+    $cur = $Path.Substring(0, 3)
+    foreach ($seg in $Path.TrimEnd('\').Substring(3).Split('\')) {
+        $cur = Join-Path $cur $seg
+        if (Test-Path -LiteralPath $cur) { if ((Get-Item -LiteralPath $cur -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { return $false } }
+    }
+    return $true
+}
+function Test-DriveExists([string] $Letter) {
+    return [bool]($Letter -match '^[A-Za-z]$' -and (Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3 AND DeviceID='${Letter}:'"))
+}
+
 function Job-Restore($p, [string] $JobId) {
     $snap = Get-SnapshotId ([string]$p.snapshot)
     $items = @($p.items | ForEach-Object { Get-SnapPath ([string]$_) })
     if ($items.Count -lt 1 -or $items.Count -gt 50) { throw 'nothing to restore' }
-    # Always a NEW folder, never the original location: restoring cannot overwrite what is on the machine today.
-    $drive = $env:SystemDrive.Substring(0, 1)
-    if ($p.drive) { $drive = [string]$p.drive }
-    if ($drive -notmatch '^[A-Za-z]$' -or -not (Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3 AND DeviceID='${drive}:'")) { throw 'that drive is not available' }
-    $base = "${drive}:\MSP-Restored"
-    New-Item -ItemType Directory -Force -Path $base | Out-Null
-    # Restored files are customer data: only SYSTEM and Administrators can open them (well-known SIDs, any language).
-    & icacls.exe $base /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' | Out-Null
-    $target = Join-Path $base ((Get-Date).ToString('yyyyMMdd-HHmmss'))
-    New-Item -ItemType Directory -Force -Path $target | Out-Null
-    $a = @('restore', $snap, '--no-lock', '--verify', '--json', '--target', $target)
-    foreach ($i in $items) {
-        # restic reads --include as a pattern: escape characters that would otherwise be wildcards
-        $esc = (($i -replace '\[', '[[]') -replace '\*', '[*]') -replace '\?', '[?]'
-        $a += @('--include', $esc)
-    }
+    $mode = 'safe'; if ($p.target) { $mode = [string]$p.target }
+    $overwrite = 'never'; if ($p.overwrite) { $overwrite = [string]$p.overwrite }
+    if (@('safe', 'folder', 'original') -notcontains $mode -or @('never', 'always') -notcontains $overwrite) { throw 'bad restore options' }
     $out = Join-Path $Work 'job.out'; $err = Join-Path $Work 'job.err'
     $tick = { $pr = Get-ResticProgress $out; if ($pr) { Send-Job $JobId @{ status = 'running'; progress = $pr } } }
-    $rc = Invoke-Restic $a $out $err $tick
-    if ($rc -ne 0) { Fail-Restic 'restoring' $err }
+
+    # One restic run per destination: the escaped --include patterns (restic reads them as patterns, so characters that
+    # would be wildcards are escaped) plus the destination.
+    $runs = New-Object System.Collections.ArrayList
+    function Add-Includes($list) { $inc = @(); foreach ($i in $list) { $inc += @('--include', ((($i -replace '\[', '[[]') -replace '\*', '[*]') -replace '\?', '[?]')) }; return $inc }
+    if ($mode -eq 'safe') {
+        # A NEW folder that only SYSTEM and Administrators can open: restoring cannot overwrite anything on the machine.
+        $drive = $env:SystemDrive.Substring(0, 1)
+        if ($p.drive) { $drive = [string]$p.drive }
+        if (-not (Test-DriveExists $drive)) { throw 'that drive is not available' }
+        $base = "${drive}:\MSP-Restored"
+        New-Item -ItemType Directory -Force -Path $base | Out-Null
+        & icacls.exe $base /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' | Out-Null
+        $target = Join-Path $base ((Get-Date).ToString('yyyyMMdd-HHmmss'))
+        New-Item -ItemType Directory -Force -Path $target | Out-Null
+        [void]$runs.Add(@{ spec = $snap; target = $target; include = (Add-Includes $items) })
+        $where = $target
+    } elseif ($mode -eq 'folder') {
+        $folder = ([string]$p.folder).TrimEnd('\')
+        if (-not (Test-RestoreFolder $folder)) { throw 'that folder cannot be restored into' }
+        if (-not (Test-DriveExists $folder.Substring(0, 1))) { throw 'that drive is not available' }
+        New-Item -ItemType Directory -Force -Path $folder | Out-Null
+        [void]$runs.Add(@{ spec = $snap; target = $folder; include = (Add-Includes $items) })
+        $where = $folder
+    } else {
+        # Back where the files came from: each drive's part of the snapshot goes onto that drive ("<snapshot>:/D" is the
+        # snapshot's D folder, restored onto D:\).
+        $byDrive = @{}
+        foreach ($i in $items) {
+            $m = [regex]::Match($i, '^/([A-Za-z])(/.*)?$')
+            if (-not $m.Success) { throw 'bad path' }
+            $letter = $m.Groups[1].Value.ToUpper(); $rel = $m.Groups[2].Value
+            if ($rel -ne '' -and -not (Test-RestoreName ("${letter}:" + ($rel -replace '/', '\')))) { throw 'that location cannot be restored into' }
+            if (-not $byDrive.ContainsKey($letter)) { $byDrive[$letter] = New-Object System.Collections.ArrayList }
+            [void]$byDrive[$letter].Add($rel)
+        }
+        foreach ($letter in ($byDrive.Keys | Sort-Object)) {
+            if (-not (Test-DriveExists $letter)) { throw "drive ${letter}: is not available on this computer" }
+            $rels = @($byDrive[$letter] | Where-Object { $_ -ne '' })
+            $inc = @(); if ($rels.Count -eq $byDrive[$letter].Count) { $inc = Add-Includes $rels }    # a whole drive restores everything
+            [void]$runs.Add(@{ spec = ($snap + ':/' + $letter); target = ("${letter}:\"); include = $inc })
+        }
+        $where = 'the original locations'
+    }
+
     $files = 0; $bytes = 0
-    $sum = Get-Content -Path $out -Tail 20 -ErrorAction SilentlyContinue | Where-Object { $_ -like '*"message_type":"summary"*' } | Select-Object -Last 1
-    if ($sum) { try { $s = $sum | ConvertFrom-Json; if ($s.PSObject.Properties['files_restored']) { $files = [int64]$s.files_restored }; if ($s.PSObject.Properties['bytes_restored']) { $bytes = [int64]$s.bytes_restored } } catch { } }
-    Write-Log ("restored {0} item(s) from snapshot {1} into {2}" -f $items.Count, $snap, $target)
-    return @{ target = $target; files = $files; bytes = $bytes }
+    foreach ($run in $runs) {
+        $a = @('restore', $run.spec, '--no-lock', '--verify', '--json', '--target', $run.target, '--overwrite', $overwrite) + @($run.include | Where-Object { $_ })
+        $rc = Invoke-Restic $a $out $err $tick
+        if ($rc -ne 0) { Fail-Restic 'restoring' $err }
+        $sum = Get-Content -Path $out -Tail 20 -ErrorAction SilentlyContinue | Where-Object { $_ -like '*"message_type":"summary"*' } | Select-Object -Last 1
+        if ($sum) { try { $s = $sum | ConvertFrom-Json; if ($s.PSObject.Properties['files_restored']) { $files += [int64]$s.files_restored }; if ($s.PSObject.Properties['bytes_restored']) { $bytes += [int64]$s.bytes_restored } } catch { } }
+    }
+    Write-Log ("restored {0} item(s) from snapshot {1} ({2}, existing files: {3}) into {4}" -f $items.Count, $snap, $mode, $overwrite, $where)
+    return @{ target = $where; files = $files; bytes = $bytes; mode = $mode }
 }
 
 function Invoke-AgentJob($job) {

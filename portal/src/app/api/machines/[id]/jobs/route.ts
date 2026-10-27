@@ -24,6 +24,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   try { body = Body.parse(await readJson(req, 20_000)); } catch { return json({ error: "bad request" }, 400); }
   if (STAFF_ONLY.includes(body.type) && !isStaffFor(scope, machine.customer_slug)) return json({ error: "not allowed" }, 403);
   if (!machine.backup_enabled) return json({ error: "this machine is not set up for backup" }, 409);
+  // Putting files back where they came from can replace live data: staff only.
+  const p = body.params as { target?: string } | null | undefined;
+  if (body.type === "restore" && p?.target === "original" && !isStaffFor(scope, machine.customer_slug)) return json({ error: "not allowed" }, 403);
 
   let id: string;
   try { id = await createJob(machine.id, body.type, body.params ?? {}, scope.username); }

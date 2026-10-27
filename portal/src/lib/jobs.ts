@@ -21,6 +21,22 @@ export const snapPath = z.string().min(1).max(600).refine(noControl).refine(
 
 export const snapshotId = z.string().regex(/^([0-9a-f]{8,64}|latest)$/);
 
+/**
+ * Where a person may restore files to. The agent writes as SYSTEM, so system locations are off limits: Windows, program
+ * folders, ProgramData, any AppData (that is where Startup lives) and the drive itself. The agent checks the same rules.
+ */
+export function restoreFolderProblem(p: string): string | null {
+  const m = /^([A-Za-z]):\\(.+)$/.exec(p.replace(/\\+$/, ""));
+  if (!m) return "choose a folder, not a whole drive";
+  const parts = m[2].split("\\");
+  const first = parts[0].toLowerCase();
+  if (["windows", "program files", "program files (x86)", "programdata", "system volume information", "recovery", "$recycle.bin", "msp-backup"].includes(first)) return "system folder";
+  if (first === "users" && parts.some((x, i) => i >= 2 && x.toLowerCase() === "appdata")) return "system folder";
+  if (first === "users" && parts[1]?.toLowerCase() === "default") return "system folder";
+  return null;
+}
+export const restoreFolder = winPath.refine((p) => p !== "" && !/[*]/.test(p) && restoreFolderProblem(p) === null, "cannot restore there");
+
 export const JobSchemas = {
   list_dirs: z.object({ path: winPath }).strict(),
   backup_now: z.object({}).strict(),
@@ -34,7 +50,18 @@ export const JobSchemas = {
     snapshot: snapshotId,
     items: z.array(snapPath).min(1).max(50),
     drive: z.string().regex(/^[A-Z]$/).optional(),
-  }).strict(),
+    // safe = a new administrators-only folder (default); folder = a folder the person chose; original = back where
+    // the files came from (staff only, enforced by the route). Existing files are kept unless overwrite is "always".
+    target: z.enum(["safe", "folder", "original"]).optional(),
+    folder: z.string().max(400).optional(),
+    overwrite: z.enum(["never", "always"]).optional(),
+  }).strict().superRefine((v, ctx) => {
+    if ((v.target === "folder") !== (v.folder !== undefined)) ctx.addIssue({ code: "custom", message: "folder is for the folder choice only" });
+    if (v.folder !== undefined) {
+      const r = restoreFolder.safeParse(v.folder);
+      if (!r.success) ctx.addIssue({ code: "custom", message: "that folder cannot be restored into" });
+    }
+  }),
 } as const;
 
 export type JobType = keyof typeof JobSchemas;
