@@ -151,6 +151,16 @@ Notes:
 - `scripts/revoke-site.sh <customer> <site> [--remove-mesh-group]` cuts the monitoring keys; the group (and its devices in MeshCentral) is only removed with the flag.
 - MeshCentral Router is not used: the Desktop/Terminal/Files tabs cover day-to-day support.
 
+## Customer backup storage (NAS)
+
+Customer-machine backups (Restic) are stored on the NAS, not on the platform volume. `scripts/setup-backup-storage.sh --nfs HOST:/export [--init]` (called by `bootstrap-vm.sh --backup-nfs ...`) mounts the share at `/srv/msp-backups` through `msp-backup-nfs.service`:
+
+- The mount point is **immutable while unmounted**, so nothing can write to the VM's own disk if the NAS is missing.
+- A marker file (`.msp-backup-root`) must exist on the share, so a wrong or uninitialised share is refused (`--init` creates it on a new, empty one).
+- It retries while the NAS is unreachable and recovers by itself. Docker is ordered after it but never *requires* it, so a NAS outage cannot stop the platform from starting.
+
+NAS side (TrueNAS SCALE 25.10): dataset `Share/msp-backups` (quota, 1 MiB records, POSIX ACLs, mode 750, owner `restic-svc` uid 1500 / gid 3002), NFS share restricted to the VM's storage address with Mapall `restic-svc`, plus a daily ZFS snapshot task. S3 (e.g. Wasabi) is planned later as a cold tier by copying long-lived snapshots with `restic copy`.
+
 ## Agent footprint and outage buffering
 
 Measured on Telegraf 1.40.2 / Windows: the program is ~315 MB on disk (the agent log is capped at ~20 MB); an idle agent uses ~97 MB of RAM. Collected data is **never written to disk**: during an outage it waits in RAM (200,000 metrics, ~66 hours, ~140 MB; 5,000 event-log entries, ~85 MB), oldest dropped first when full. Both buffers completely full is ~330 MB (~500 MB allowing for Go GC slack), well inside a 1 GB ceiling. A restart or reboot during an outage loses what is buffered, and event-log entries written while the agent is stopped are not sent. Costs per item are in the comments of `agent/windows/telegraf.conf.tmpl`; re-measure before raising the limits.

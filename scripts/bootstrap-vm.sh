@@ -8,12 +8,13 @@
 #     --initiator iqn.2026-10.lan.msp:msp-app --luks-key /path/to/msp-luks.key \
 #     [--repo https://github.com/OWNER/REPO.git]   # only needed on the very first build
 #     [--init-new-lun]                              # FORMATS a blank LUN. Never needed on rebuilds.
+#     [--backup-nfs 192.168.20.251:/mnt/Share/msp-backups]   # attach the NAS backup share (see setup-backup-storage.sh)
 #
 # Prereq: the storage NIC is up with a static IP that can reach the portal (no gateway).
 # Safe to re-run. It refuses to format anything that already has data.
 set -euo pipefail
 
-PORTAL="" TARGET="" INITIATOR="" KEYSRC="" REPO="" INIT_NEW=0 MNT=/srv/msp
+PORTAL="" TARGET="" INITIATOR="" KEYSRC="" REPO="" INIT_NEW=0 BACKUP_NFS="" MNT=/srv/msp
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --portal)       PORTAL="$2"; shift 2;;
@@ -22,6 +23,7 @@ while [[ $# -gt 0 ]]; do
     --luks-key)     KEYSRC="$2"; shift 2;;
     --repo)         REPO="$2"; shift 2;;
     --init-new-lun) INIT_NEW=1; shift;;
+    --backup-nfs)   BACKUP_NFS="$2"; shift 2;;
     *) echo "unknown option: $1" >&2; exit 2;;
   esac
 done
@@ -148,6 +150,10 @@ cd "$MNT/app"
 chmod +x scripts/*.sh
 [[ -f .env && -d secrets ]] || scripts/init-secrets.sh
 scripts/prepare-data.sh
+# The backup share is optional and must never stop the platform from coming up: a failure only warns.
+if [[ -n "$BACKUP_NFS" ]]; then
+  scripts/setup-backup-storage.sh --nfs "$BACKUP_NFS" || echo "WARNING: backup storage was not attached (see journalctl -u msp-backup-nfs); backups will wait" >&2
+fi
 docker compose up -d
 docker compose ps --format 'table {{.Service}}\t{{.Status}}'
 say "Done"
