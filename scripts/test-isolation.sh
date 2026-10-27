@@ -64,9 +64,9 @@ rq="$(docker compose exec -T -e INFLUX_TOKEN="$A_W" influxdb influx query --org 
 check "write-only token cannot read its own bucket" 1 "$([[ "$rq" == *"could not find bucket"* || "$rq" == *nauthorized* || "$rq" == *ermission* ]] && echo 1 || echo 0)"
 
 # ── Grafana org isolation on metrics
-fluxq() { # fluxq <org-id> <bucket> -> distinct hosts visible
+fluxq() { # fluxq <org-id> <bucket> -> distinct hosts visible (last point per host: a busy real agent would otherwise exceed Grafana's 1001-point limit)
   curl -s -u "$GFA" -H "X-Grafana-Org-Id: $1" -H 'Content-Type: application/json' "$GF/api/ds/query" \
-    -d "{\"queries\":[{\"refId\":\"A\",\"datasource\":{\"uid\":\"influx\"},\"query\":\"from(bucket: \\\"$2\\\") |> range(start: -1h) |> filter(fn: (r) => r._measurement == \\\"cpu\\\") |> keep(columns: [\\\"host\\\",\\\"_value\\\"])\"}],\"from\":\"now-1h\",\"to\":\"now\"}" \
+    -d "{\"queries\":[{\"refId\":\"A\",\"datasource\":{\"uid\":\"influx\"},\"query\":\"from(bucket: \\\"$2\\\") |> range(start: -1h) |> filter(fn: (r) => r._measurement == \\\"cpu\\\") |> group(columns: [\\\"host\\\"]) |> last() |> keep(columns: [\\\"host\\\",\\\"_value\\\"])\"}],\"from\":\"now-1h\",\"to\":\"now\"}" \
   | jq -r '[.results.A.frames[]?.schema.fields[]?.labels.host? // empty] | unique | join(",")'
 }
 echo "      testco org, own bucket sees hosts: [$(fluxq "$OA" cust_testco)]"

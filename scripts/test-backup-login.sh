@@ -22,5 +22,5 @@ check "rb (added before) still logs in"             ok "$(ok "$(code -u "$UB:$PB
 check "ra (removed) is refused"                     401 "$(code -u "$UA:$PA" "$SRV/$UA/config")"
 # (the server logs 'Invalid htpasswd entry for X' for any refused login of an unknown/removed user, so it is not an error signal)
 for m in rb rc; do scripts/backup-remove-machine.sh testco main $m --delete-backups >/dev/null 2>&1; done
-check "everything cleaned up (marker only)"         1 "$([[ $(ls -A "$BACKUP_DIR" | wc -l) == 1 ]] && echo 1 || echo 0)"
+check "everything cleaned up (no test repositories left)" 1 "$([[ -z "$(ls -A "$BACKUP_DIR" | grep -E '^testco-main-r[abc]$')" ]] && echo 1 || echo 0)"
 echo; echo "RESULT: $pass passed, $fail failed"

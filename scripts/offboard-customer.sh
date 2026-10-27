@@ -38,6 +38,10 @@ fi
 grep -q "^${slug}"$'\t' generated/customers.tsv 2>/dev/null || echo "note: '${slug}' is not in generated/customers.tsv (already suspended or partly removed?) - continuing with what is left"
 
 set -a; source .env; set +a
+# Run with sudo, the helper scripts replace the registries with new root-owned files, which the normal-user scripts
+# (add-customer, add-site, backup-add-machine, the tests) then cannot update. Hand them back to the owner of .env on exit.
+fix_owner() { if [[ $EUID -eq 0 ]]; then chown --reference=.env generated/customers.tsv generated/sites.tsv generated/backup/machines.tsv generated/restic/htpasswd generated/offboard-audit.log 2>/dev/null || true; fi; }
+trap fix_owner EXIT
 BK="${BACKUP_DIR:-/srv/msp-backups}"
 INFLUX_TOKEN="$(cat secrets/influx_admin_token)"
 GF_AUTH="msp-admin:$(cat secrets/grafana_admin_password)"

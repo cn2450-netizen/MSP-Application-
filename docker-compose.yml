@@ -211,7 +211,11 @@ services:
   # make it write to the VM's own disk. rslave lets a share that mounts AFTER the container started still appear.
   restic-server:
     <<: *common
-    image: restic/rest-server:${RESTIC_SERVER_TAG}
+    build:
+      context: ./docker/restic-server
+      args:
+        REST_VERSION: ${RESTIC_SERVER_TAG}
+    image: msp-platform/restic-server:${RESTIC_SERVER_TAG}
     user: "1500:3002"
     read_only: true
     cap_drop: [ALL]
