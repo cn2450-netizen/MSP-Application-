@@ -7,7 +7,8 @@
 # (scripts/backup-add-machine.sh); --register does that and builds the installer for any online device that has none.
 # Same push mechanics as mesh-deploy-monitoring.sh: upload to C:\Windows\Temp, run as SYSTEM, report, delete from the
 # device and from the MeshCentral container (the installer holds that machine's backup passwords).
-# More than one device needs --yes (or pick one with --device). --run-now starts the first backup straight away.
+# Machines that are not registered are skipped (backup is opt-in per machine); naming one with --device that is not
+# registered is an error. More than one device needs --yes (or pick one with --device). --run-now starts the first backup straight away.
 # Re-running upgrades an existing install. Needs a MeshCentral login token: scripts/mesh-token.sh set
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -59,7 +60,14 @@ while read -r dev; do
     fi
     scripts/build-backup-installer.sh "$cust" "$site" "$host" ${paths:+--paths "$paths"} >/dev/null || { echo "  could not build the installer"; failed=$((failed+1)); continue; }
   fi
-  if [[ ! -f "$installer" ]]; then echo "  SKIPPED: not registered for backup (scripts/backup-add-machine.sh ${cust} ${site} ${host}, then scripts/build-backup-installer.sh, or use --register)"; skipped=$((skipped+1)); continue; fi
+  if [[ ! -f "$installer" ]]; then
+    if [[ -n "$only" ]]; then   # asked for this machine by name: not being able to back it up is an error
+      echo "  NOT REGISTERED for backup: use --register, or scripts/backup-add-machine.sh ${cust} ${site} ${host} then scripts/build-backup-installer.sh"; failed=$((failed+1))
+    else
+      echo "  skipped: not registered for backup (normal: only registered machines are backed up; --register to include it)"; skipped=$((skipped+1))
+    fi
+    continue
+  fi
 
   docker compose exec -T meshcentral sh -c "umask 077; cat > ${CT}" < "$installer"
   up="$(mc Upload --id "$id" --file "$CT" --target "$REMOTE_DIR")"
@@ -75,4 +83,4 @@ while read -r dev; do
 done < <(jq -c '.[]' <<<"$devices")
 
 echo; echo "Done: ${ok} confirmed, ${failed} not confirmed, ${skipped} skipped."
-[[ "$failed" == 0 && "$skipped" == 0 ]]
+[[ "$failed" == 0 ]]
