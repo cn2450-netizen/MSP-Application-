@@ -3,12 +3,16 @@
 # Agents using this site's keys are refused from the next request; the customer's other sites are untouched
 # and the data already collected stays. Re-run add-site.sh to issue fresh keys (agents must be reinstalled).
 #
-# usage: scripts/revoke-site.sh <customer> <site>
+# usage: scripts/revoke-site.sh <customer> <site> [--remove-mesh-group]
+#   --remove-mesh-group also DELETES the site's MeshCentral device group (and therefore its devices from MeshCentral).
+#   Not the default: revoking monitoring keys is not the same as ending remote access. Needs a stored login token.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-cust="${1:?usage: revoke-site.sh <customer> <site>}"
+cust="${1:?usage: revoke-site.sh <customer> <site> [--remove-mesh-group]}"
 site="${2:?site required}"
+remove_mesh=0
+if [[ "${3:-}" == "--remove-mesh-group" ]]; then remove_mesh=1; elif [[ -n "${3:-}" ]]; then echo "unknown option ${3}" >&2; exit 2; fi
 [[ "$cust" =~ ^[a-z0-9][a-z0-9-]{1,30}$ && "$site" =~ ^[a-z0-9][a-z0-9-]{0,30}$ ]] || { echo "invalid name"; exit 1; }
 
 row="$(awk -F'\t' -v c="$cust" -v s="$site" '$1==c && $2==s' generated/sites.tsv)"
@@ -38,6 +42,13 @@ if [[ -n "$loki_key" ]]; then
   else echo "  WARNING: the gateway still accepted the key after 6 s. Check: docker compose logs gateway" >&2; fi
 fi
 awk -F'\t' -v c="$cust" -v s="$site" '!($1==c && $2==s)' generated/sites.tsv > generated/sites.tsv.new && mv generated/sites.tsv.new generated/sites.tsv
+if [[ "$remove_mesh" == 1 ]]; then
+  source scripts/lib/meshcentral.sh
+  if mesh_login; then
+    gid="$(mesh_group_id "${cust} / ${site}")"
+    if [[ -n "$gid" ]]; then mc RemoveDeviceGroup --id "$gid" | head -2 | sed 's/^/  MeshCentral: /'; else echo "  MeshCentral: no device group '${cust} / ${site}' to remove"; fi
+  else echo "  MeshCentral: no valid login token; the device group was NOT removed" >&2; fi
+fi
 rm -f "$cred"
 rm -rf "generated/agents/${cust:?}/${site:?}"
 echo "Done. The site's installer and credential file were deleted."

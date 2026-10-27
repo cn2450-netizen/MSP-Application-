@@ -126,6 +126,31 @@ Download `telegraf.exe` from the vendor's release page and note its published SH
   -TelegrafSha256 <published hash>
 ```
 
+## Remote access and agent rollout (MeshCentral)
+
+MeshCentral (https://remote.<domain>) signs in through authentik and gives techs Desktop / Terminal / Files on managed PCs. Each site is a device group named `<customer> / <site>`; the default consent is **notify + on-screen toolbar** (71), set per group with `--consent`.
+
+**There is no standing admin credential.** Scripts use a short-lived login token that a person creates while signed in (My Account -> Create login token, 1-2 hours) and stores with `scripts/mesh-token.sh set` (username on line 1, password on line 2, from stdin). Clear it when done: `scripts/mesh-token.sh clear`.
+
+Onboarding a customer end to end:
+
+```bash
+scripts/add-customer.sh acme "Acme Corp"          # customer + first site "main" (+ its device group if a token is stored)
+scripts/add-site.sh acme branch "Branch office"   # more locations; each gets its own keys and device group
+scripts/mesh-site.sh acme main                    # (re)create a site's device group and fetch its MeshCentral agent; --all for every site
+# put the MeshCentral agent on each PC: send generated/agents/acme/main/meshagent64-acme-main.exe,
+# or give the user a link:
+scripts/mesh-invite.sh acme main 24               # invitation link, valid 24 h; send privately
+scripts/mesh-deploy-monitoring.sh acme main --yes # push + run the monitoring agent on every online PC in the site (also upgrades)
+scripts/mesh-grant.sh                             # give each customer's techs access (see note)
+```
+
+Notes:
+- **Tech access:** MeshCentral takes user groups from authentik and refuses to create them by hand, so `tech-<customer>` only exists in MeshCentral after someone in that authentik group has signed in once. Run `scripts/mesh-grant.sh` after that first sign-in (and after adding sites).
+- **Deploying through Mesh** copies the site's installer (it holds that site's write-only keys) into the MeshCentral container only for the push, uploads it to `C:\Windows\Temp`, runs it as SYSTEM, then deletes it from the PC and the container.
+- `scripts/revoke-site.sh <customer> <site> [--remove-mesh-group]` cuts the monitoring keys; the group (and its devices in MeshCentral) is only removed with the flag.
+- MeshCentral Router is not used: the Desktop/Terminal/Files tabs cover day-to-day support.
+
 ## Agent footprint and outage buffering
 
 Measured on Telegraf 1.40.2 / Windows: the program is ~315 MB on disk (the agent log is capped at ~20 MB); an idle agent uses ~97 MB of RAM. Collected data is **never written to disk**: during an outage it waits in RAM (200,000 metrics, ~66 hours, ~140 MB; 5,000 event-log entries, ~85 MB), oldest dropped first when full. Both buffers completely full is ~330 MB (~500 MB allowing for Go GC slack), well inside a 1 GB ceiling. A restart or reboot during an outage loses what is buffered, and event-log entries written while the agent is stopped are not sent. Costs per item are in the comments of `agent/windows/telegraf.conf.tmpl`; re-measure before raising the limits.

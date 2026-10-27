@@ -78,4 +78,12 @@ printf '%s\t%s\t%s\t%s\t%s\n' "$cust" "$site" "$site_name" "$(date -u +%FT%TZ)" 
 trap - ERR
 scripts/build-agent-installer.sh "$cust" "$site" || echo "WARNING: could not build the installer; run scripts/build-agent-installer.sh ${cust} ${site} to retry" >&2
 echo
+if [[ -s generated/mesh-token ]]; then
+  echo "MeshCentral: creating the device group and fetching the site's remote-access agent..."
+  scripts/mesh-site.sh "$cust" "$site" || echo "WARNING: the MeshCentral step failed; retry with: scripts/mesh-site.sh ${cust} ${site}" >&2
+else
+  echo "MeshCentral: no login token stored, so no device group yet. When ready: create a token (My Account -> Create login token),"
+  echo "  scripts/mesh-token.sh set, then scripts/mesh-site.sh ${cust} ${site}"
+fi
+echo
 echo "Site '${site}' added to '${cust}'. Credentials: ${cred} (mode 600)"
