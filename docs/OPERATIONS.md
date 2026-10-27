@@ -69,6 +69,10 @@ Scripts that touch MeshCentral need a short-lived login token because there is n
 - **Each computer's repository password**: in its credentials file and in your vault. Without it its backups cannot be read.
 - Admin sudo requires a password (passwordless sudo removed); scripts that use `sudo` need an interactive session.
 
+## Host firewall
+
+`msp-firewall.service` (`sudo scripts/install-host-firewall.sh`) lets only `NPM_IP` reach the platform's published ports. To reach a port directly while troubleshooting, add your workstation to `FW_ALLOW_FROM` in `.env` and re-run the script, or stop the service (`sudo systemctl stop msp-firewall`) and start it again afterwards. If you change NPM's address, update `NPM_IP` and re-run. `sudo scripts/install-host-firewall.sh --remove` removes it.
+
 ## Platform backup
 
 `msp-platform-backup.timer` runs `scripts/backup-platform.sh` daily at 03:30 (install with `sudo scripts/install-platform-backup.sh`, once, after `sudo scripts/backup-platform.sh --init`). It saves a full database dump, an InfluxDB backup, `secrets/`, `generated/`, `config/`, `.env`, and the authentik, Grafana, MeshCentral and Influx config data to `/srv/msp-backups/_platform`, keeps 7 daily / 4 weekly / 6 monthly, runs `restic check` on a rotating subset, and restores the newest snapshot to prove the dump is complete. A failure leaves the service failed: `systemctl status msp-platform-backup`; the last result is in `generated/backup/platform.status`.
