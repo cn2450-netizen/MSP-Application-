@@ -9,12 +9,13 @@
 #     [--repo https://github.com/OWNER/REPO.git]   # only needed on the very first build
 #     [--init-new-lun]                              # FORMATS a blank LUN. Never needed on rebuilds.
 #     [--backup-nfs 192.168.20.251:/mnt/Share/msp-backups]   # attach the NAS backup share (see setup-backup-storage.sh)
+#     [--chap]                                      # the target requires mutual CHAP: asks for the two secrets (from your vault)
 #
 # Prereq: the storage NIC is up with a static IP that can reach the portal (no gateway).
 # Safe to re-run. It refuses to format anything that already has data.
 set -euo pipefail
 
-PORTAL="" TARGET="" INITIATOR="" KEYSRC="" REPO="" INIT_NEW=0 BACKUP_NFS="" MNT=/srv/msp
+PORTAL="" TARGET="" INITIATOR="" KEYSRC="" REPO="" INIT_NEW=0 BACKUP_NFS="" CHAP=0 MNT=/srv/msp
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --portal)       PORTAL="$2"; shift 2;;
@@ -24,6 +25,7 @@ while [[ $# -gt 0 ]]; do
     --repo)         REPO="$2"; shift 2;;
     --init-new-lun) INIT_NEW=1; shift;;
     --backup-nfs)   BACKUP_NFS="$2"; shift 2;;
+    --chap)         CHAP=1; shift;;
     *) echo "unknown option: $1" >&2; exit 2;;
   esac
 done
@@ -57,6 +59,14 @@ echo "InitiatorName=${INITIATOR}" > /etc/iscsi/initiatorname.iscsi
 systemctl restart iscsid
 iscsiadm -m discovery -t sendtargets -p "${PORTAL}:3260" >/dev/null
 iscsiadm -m node -T "$TARGET" -p "${PORTAL}:3260" --op update -n node.startup -v automatic
+if [[ "$CHAP" == 1 ]]; then
+  read -rsp "CHAP secret the VM uses (msp-app): " CS; echo
+  read -rsp "CHAP secret the SAN uses (msp-san, peer): " CP; echo
+  for kv in "authmethod CHAP" "username msp-app" "password $CS" "username_in msp-san" "password_in $CP"; do
+    iscsiadm -m node -T "$TARGET" -p "${PORTAL}:3260" --op update -n "node.session.auth.${kv%% *}" -v "${kv#* }"
+  done
+  unset CS CP
+fi
 iscsiadm -m session 2>/dev/null | grep -q "$TARGET" || iscsiadm -m node -T "$TARGET" -p "${PORTAL}:3260" --login >/dev/null
 DEVLINK="/dev/disk/by-path/ip-${PORTAL}:3260-iscsi-${TARGET}-lun-"
 for _ in $(seq 1 20); do compgen -G "${DEVLINK}*" >/dev/null && break; sleep 1; done

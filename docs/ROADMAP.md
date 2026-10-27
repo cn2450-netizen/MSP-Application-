@@ -17,7 +17,7 @@
 
 | Item | Why |
 |---|---|
-| CHAP on the iSCSI target | The target is restricted by initiator name and address only |
+| CHAP on the iSCSI target | The target is restricted by initiator name and address only. First attempt 2026-10-27 failed and was rolled back (see "CHAP retry plan" below) |
 | HSTS on the remaining hosts | Only the portal sets it |
 | Self-service password reset and mail (SMTP) | No recovery flow today; an admin removes the authenticator for lost phones |
 | AD source (LDAPS) for staff | Staff are currently local authentik users |
@@ -27,6 +27,19 @@
 | Replace onto a genuinely different computer | Tested only for a rebuild under the same name |
 | Incremental backup after the first large one; VSS open-file test; reboot test | Not yet observed |
 | Delete `D:\MSP-Test-Restore` on the test PC and the lab test customers | Leftover test data |
+
+## CHAP retry plan
+
+The VM side is ready (`scripts/iscsi-set-chap.sh`, `bootstrap-vm.sh --chap`). The 2026-10-27 attempt used mutual CHAP, the login was refused in every combination, and the target was set back to None. Retry as one-way CHAP in a planned window:
+
+1. Stop the platform (`docker compose down`); keep an SSH session open on the management address.
+2. TrueNAS, Authorized Access: a **new** entry with only User and Secret (12-16 characters, no look-alikes); leave **Peer User and Peer Secret empty** and **Discovery Authentication None**.
+3. Target `msp-apps`, group: Authorization Method **CHAP**, Authorization Group Number = the entry's Group ID.
+4. VM: `sudo scripts/iscsi-set-chap.sh --set` (blank peer secret), then log out and in: `iscsiadm -m node -T <iqn> --logout` then `--login`.
+5. Reboot once to prove the boot-time login, and keep the secret in the vault (a rebuilt VM needs it: `bootstrap-vm.sh --chap`).
+6. Rollback if it fails: TrueNAS group method None, then on the VM `sudo ~/iscsi-set-chap.sh --disable` (the repo is on the LUN, so keep a copy of the script outside it) and `systemctl restart msp-data`.
+
+Mutual CHAP can follow once one-way works.
 
 ## Next phase (as you decided): onboard customers and watch
 
