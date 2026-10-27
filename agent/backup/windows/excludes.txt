@@ -1,0 +1,44 @@
+# Default exclusions for the MSP backup agent (restic exclude-file syntax; one pattern per line; ASCII only).
+# Goal: everything a person or application would need to get their DATA back, nothing that is only the operating system,
+# installed programs, caches or scratch space. This is NOT a bare-metal image: it cannot rebuild the OS.
+# !! A literal "$" MUST be written as the character class [$]. restic expands $NAME as an environment variable inside
+# !! exclude files, so a bare "$WinREAgent" becomes "" and the rule "**/" silently excludes EVERYTHING (found in testing).
+# Site-specific additions go in agent/backup/windows/excludes.site/<customer>-<site>.txt (appended by the builder).
+
+# Operating system and installed programs (reinstallable)
+C:/Windows
+C:/Program Files
+C:/Program Files (x86)
+C:/ProgramData/Microsoft
+C:/ProgramData/Package Cache
+C:/[$]Recycle.Bin
+**/[$]RECYCLE.BIN
+**/System Volume Information
+**/[$]WINDOWS.~BT
+**/[$]WinREAgent
+C:/Recovery
+C:/MSOCache
+
+# System files that are rebuilt automatically
+**/pagefile.sys
+**/hiberfil.sys
+**/swapfile.sys
+**/DumpStack.log*
+
+# This backup agent's own files (config holds secrets; the cache is large and disposable)
+C:/Program Files/MSP-Backup
+C:/Program Files/MSP-Agent
+
+# Per-user caches and scratch space
+**/AppData/Local/Temp
+**/AppData/Local/Microsoft/Windows/INetCache
+**/AppData/Local/Microsoft/Windows/WebCache
+**/AppData/Local/Microsoft/Windows/Explorer
+**/AppData/Local/CrashDumps
+**/AppData/Local/Packages
+**/AppData/Local/Google/Chrome/User Data/*/Cache
+**/AppData/Local/Google/Chrome/User Data/*/Code Cache
+**/AppData/Local/Microsoft/Edge/User Data/*/Cache
+**/AppData/Local/Microsoft/Edge/User Data/*/Code Cache
+**/AppData/Local/Mozilla/Firefox/Profiles/*/cache2
+**/*.tmp
