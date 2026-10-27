@@ -23,7 +23,7 @@ This describes the controls that exist and the ones that do not yet. It is not a
 - Daily verification: freshness, integrity check, rotating data re-read, and a real test restore.
 
 **Platform**
-- TLS 1.2/1.3 only on every public host; plain HTTP redirects. HSTS on the portal, backup and Mesh hosts.
+- TLS 1.2/1.3 only on every public host; plain HTTP redirects. HSTS on every host except dashboards (open).
 - Host firewall (`scripts/install-host-firewall.sh`): only NPM may reach the published service ports on the VM; rpcbind is closed. Self-tests through NPM and removes itself if that fails. Rate limits and body size caps on the gateway.
 - Databases and stores sit on an internal Docker network with no published ports and no internet access.
 - Docker secrets from a mode-700 directory, never in `.env` or compose.
@@ -47,7 +47,7 @@ This describes the controls that exist and the ones that do not yet. It is not a
 These are tracked in [ROADMAP.md](ROADMAP.md). Close the first group before real customer data goes on this system:
 
 1. Enable CHAP on the iSCSI target (first attempt rolled back; see [ROADMAP.md](ROADMAP.md)).
-2. HSTS on the remaining hosts; self-service password reset and mail.
+2. HSTS on the dashboards host; self-service password reset and mail.
 3. AD (LDAPS) source in authentik.
 4. Security scan, hard power-off test and a load test.
 5. Platform backup is on the NAS only: add an off-site copy and rehearse a full rebuild from it.
@@ -66,7 +66,7 @@ These are tracked in [ROADMAP.md](ROADMAP.md). Close the first group before real
 | TLS versions on the six public hosts | OK: 1.2 and 1.3 only |
 | Portal dependency audit (`npm audit --omit=dev`) | OK: 0 vulnerabilities |
 | Pending OS upgrades on the VM | OK: none |
-| HSTS missing on the authentik and dashboards hosts, and on ingest | Open (NPM setting) |
+| HSTS on the public hosts | NPM now sends it on the authentik, ingest, backup, Mesh and portal hosts (checked 2026-10-27). Still missing on the dashboards (Grafana) host's redirect response |
 | SSH allows password login, root login with a key, and X11 forwarding | Open: key login is the only one in use; disable password login and root login |
 | The admin account is in the `docker` group (root-equivalent) | Accepted for the admin; keep it to named admins |
 | Container image CVE scan, authenticated web testing, load test, hard power-off test | Not done |

@@ -19,7 +19,7 @@
 | Item | Why |
 |---|---|
 | CHAP on the iSCSI target | The target is restricted by initiator name and address only. First attempt 2026-10-27 failed and was rolled back (see "CHAP retry plan" below) |
-| HSTS on the remaining hosts | Missing on the authentik, dashboards and ingest hosts (NPM setting) |
+| HSTS on the dashboards host | The other hosts send it now; the Grafana host's responses still do not (NPM setting) |
 | SSH hardening on the VM | Disable password login and root login, turn off X11 forwarding (key login is the only one in use) |
 | Self-service password reset and mail (SMTP) | No recovery flow today; an admin removes the authenticator for lost phones |
 | AD source (LDAPS) for staff | Staff are currently local authentik users |
