@@ -250,6 +250,7 @@ services:
       PORTAL_HOST: ${PORTAL_HOST}
       AUTH_HOST: ${AUTH_HOST}
       PORTAL_DB_HOST: postgres
+      PORTAL_ALLOW_SELF_APPROVE: ${PORTAL_ALLOW_SELF_APPROVE:-0}
       PORTAL_DB_PASSWORD_FILE: /run/secrets/portal_db_password
       PORTAL_OIDC_SECRET_FILE: /run/secrets/portal_oidc_secret
       NODE_ENV: production

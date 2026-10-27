@@ -158,6 +158,53 @@ export async function restoresLast30Days(scope: Scope): Promise<number> {
   return Number(r?.n ?? 0);
 }
 
+// ---- replacing a computer (see migrations/004_replacement.sql) ----
+
+export type Replacement = {
+  id: string; machine_id: string; new_device: string; status: "pending" | "approved" | "running" | "done" | "failed" | "rejected" | "cancelled";
+  requested_by: string; requested_at: string; decided_by: string | null; decided_at: string | null; message: string | null; finished_at: string | null;
+};
+const REPLACEMENT_COLS = "id, machine_id, new_device, status, requested_by, requested_at, decided_by, decided_at, message, finished_at";
+
+/** The open request for a machine, or else the most recent finished one (so a result stays visible). */
+export async function currentReplacement(machineId: string): Promise<Replacement | null> {
+  return q1<Replacement>(
+    `SELECT ${REPLACEMENT_COLS} FROM replacement WHERE machine_id = $1
+      ORDER BY (status IN ('pending','approved','running')) DESC, requested_at DESC LIMIT 1`, [machineId]);
+}
+
+export async function requestReplacement(machineId: string, device: string, by: string): Promise<string | null> {
+  const r = await q1<{ id: string }>(
+    `INSERT INTO replacement(machine_id, new_device, requested_by) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING RETURNING id`, [machineId, device, by]);
+  return r?.id ?? null;
+}
+
+export async function getReplacement(scope: Scope, id: string): Promise<(Replacement & { customer_slug: string; machine_name: string }) | null> {
+  if (!/^[0-9a-f-]{36}$/.test(id)) return null;
+  const r = await q1<Replacement & { customer_slug: string; machine_name: string }>(
+    `SELECT ${REPLACEMENT_COLS.split(", ").map((c) => `r.${c}`).join(", ")}, m.customer_slug, m.name AS machine_name
+       FROM replacement r JOIN machine m ON m.id = r.machine_id WHERE r.id = $1`, [id]);
+  return r && canSee(scope, r.customer_slug) ? r : null;
+}
+
+/** Moves a request to a new status only if it is in one of the expected ones (so two people cannot both decide). */
+export async function moveReplacement(id: string, from: Replacement["status"][], to: Replacement["status"], by: string | null): Promise<boolean> {
+  const r = await q1<{ id: string }>(
+    `UPDATE replacement SET status = $3::text, decided_by = COALESCE($4::text, decided_by), decided_at = CASE WHEN $4::text IS NULL THEN decided_at ELSE now() END,
+            message = CASE WHEN $3::text IN ('approved','pending') THEN NULL ELSE message END,
+            finished_at = CASE WHEN $3::text IN ('rejected','cancelled') THEN now() ELSE finished_at END
+      WHERE id = $1 AND status = ANY($2::text[]) RETURNING id`, [id, from, to, by]);
+  return !!r;
+}
+
+/** Requests waiting for a decision, for staff to act on. */
+export async function pendingReplacements(scope: Scope) {
+  return q<{ id: string; new_device: string; requested_by: string; requested_at: string; machine_id: string; computer: string; customer: string; customer_slug: string }>(
+    `SELECT r.id, r.new_device, r.requested_by, r.requested_at, m.id AS machine_id, COALESCE(m.display_name, m.name) AS computer, c.name AS customer, m.customer_slug
+       FROM replacement r JOIN machine m ON m.id = r.machine_id JOIN customer c ON c.slug = m.customer_slug
+      WHERE r.status = 'pending' AND ($1::text[] IS NULL OR m.customer_slug = ANY($1)) ORDER BY r.requested_at`, [visibleCustomers(scope)]);
+}
+
 export async function markInteractive(machineId: string) {
   await q("UPDATE machine SET interactive_until = now() + interval '10 minutes' WHERE id = $1", [machineId]);
 }

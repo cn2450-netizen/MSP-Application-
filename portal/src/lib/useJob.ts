@@ -7,6 +7,11 @@ export async function runJob<T = any>(machineId: string, type: string, params: u
   });
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `request failed (${res.status})`);
   const { id } = await res.json();
+  return waitForJob<T>(id, opts);
+}
+
+/** Waits for a job that already exists (for example one a server route created) and returns its result. */
+export async function waitForJob<T = any>(id: string, opts: { timeoutMs?: number; onStatus?: (s: string) => void; onProgress?: (p: any) => void } = {}): Promise<T> {
   const deadline = Date.now() + (opts.timeoutMs ?? 240_000);
   let wait = 1000;
   while (Date.now() < deadline) {

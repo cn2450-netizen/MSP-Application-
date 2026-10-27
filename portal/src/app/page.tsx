@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getScope } from "@/lib/session";
-import { listMachines, health, recentActivity, restoresLast30Days } from "@/lib/data";
+import { listMachines, health, recentActivity, restoresLast30Days, pendingReplacements } from "@/lib/data";
+import { isStaffFor } from "@/lib/authz";
 import { ago, bytes, when, describeAction, describeSchedule } from "@/lib/format";
 import Filters from "./Filters";
 import Donut from "./Donut";
@@ -31,6 +32,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ c
   const totalBytes = shown.reduce((a, { m }) => a + Number(m.bytes_processed ?? 0), 0);
   const [activity, restores] = await Promise.all([recentActivity(scope, 15), restoresLast30Days(scope)]);
   const multi = scope.admin || customers.length > 1;
+  const waiting_for_me = (await pendingReplacements(scope)).filter((r) => isStaffFor(scope, r.customer_slug));
 
   return (
     <>
@@ -50,6 +52,26 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ c
         <div className="tile"><div className="label">Data protected</div><div className="num">{bytes(totalBytes)}</div></div>
         <div className="tile"><div className="label">Restores (30 days)</div><div className="num">{restores}</div></div>
       </div>
+
+      {waiting_for_me.length > 0 && (
+        <div className="panel">
+          <h3>Waiting for approval</h3>
+          <div className="scroll">
+            <table>
+              <thead><tr><th>Computer</th>{multi && <th>Customer</th>}<th>Move backups to</th><th>Asked by</th><th /></tr></thead>
+              <tbody>
+                {waiting_for_me.map((r) => (
+                  <tr key={r.id}>
+                    <td>{r.computer}</td>{multi && <td className="muted">{r.customer}</td>}<td>{r.new_device}</td>
+                    <td className="muted">{r.requested_by}, {ago(r.requested_at)}</td>
+                    <td><a className="btn" href={`/machines/${r.machine_id}`}>Review</a></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div className="dash">
         <div className="panel">

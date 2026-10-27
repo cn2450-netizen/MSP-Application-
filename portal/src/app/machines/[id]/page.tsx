@@ -1,6 +1,8 @@
 import { notFound, redirect } from "next/navigation";
 import { getScope } from "@/lib/session";
-import { getMachine, getPolicy, getSchedule, recentJobs, health } from "@/lib/data";
+import { getMachine, getPolicy, getSchedule, recentJobs, health, currentReplacement } from "@/lib/data";
+import { env } from "@/lib/env";
+import ReplaceCard from "./ReplaceCard";
 import { isStaffFor } from "@/lib/authz";
 import { ago, bytes, when, describeSchedule } from "@/lib/format";
 import BackupNow from "./BackupNow";
@@ -23,6 +25,7 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
   const schedule = await getSchedule(m.id);
   const jobs = await recentJobs(m.id);
   const staff = isStaffFor(scope, m.customer_slug);
+  const replacement = staff ? await currentReplacement(m.id) : null;
   const online = m.last_seen && Date.now() - new Date(m.last_seen).getTime() < 5 * 60_000;
 
   return (
@@ -73,6 +76,8 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
         <a className="btn primary" href={`/machines/${m.id}/restore`}>Restore files</a>
         {staff && <a className="btn" style={{ marginLeft: 8 }} href={`/machines/${m.id}/restore?mode=search`}>Search all backups</a>}
       </div>
+
+      {staff && <ReplaceCard machineId={m.id} machineName={m.display_name || m.name} me={scope.username} rep={replacement} allowSelf={env.allowSelfApprove} />}
 
       <h2>Recent activity</h2>
       <div className="card">

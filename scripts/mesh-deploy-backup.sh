@@ -17,10 +17,11 @@ source scripts/lib/meshcentral.sh
 
 cust="${1:?usage: mesh-deploy-backup.sh <customer> <site> [--device NAME] [--register] [--paths 'D:\Data;E:\Shares'] [--run-now] [--yes]}"
 site="${2:?site required}"; shift 2
-only="" yes=0 register=0 runnow="" paths=""
+only="" yes=0 register=0 runnow="" paths="" as=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --device) only="${2:?--device needs a name}"; shift 2;;
+    --as) as="${2:?--as needs a registered machine name}"; shift 2;;      # install THIS registered machine's identity on --device (replacing a computer)
     --paths) paths="${2:?--paths needs a value}"; shift 2;;
     --register) register=1; shift;;
     --run-now) runnow=" -RunNow"; shift;;
@@ -29,6 +30,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 [[ "$cust" =~ ^[a-z0-9][a-z0-9-]{1,30}$ && "$site" =~ ^[a-z0-9][a-z0-9-]{0,30}$ ]] || { echo "invalid customer or site name" >&2; exit 2; }
+if [[ -n "$as" ]]; then
+  [[ -n "$only" ]] || { echo "--as needs --device (the one computer to install it on)" >&2; exit 2; }
+  as="$(tr 'A-Z_' 'a-z-' <<<"$as")"
+  [[ "$as" =~ ^[a-z0-9]([a-z0-9-]{0,28}[a-z0-9])?$ ]] || { echo "invalid --as name" >&2; exit 2; }
+fi
 
 mesh_login || exit 1
 gname="${cust} / ${site}"
@@ -51,7 +57,8 @@ ok=0 failed=0 skipped=0
 while read -r dev; do
   id="$(jq -r '._id' <<<"$dev")"; name="$(jq -r '.name' <<<"$dev")"
   host="$(tr 'A-Z_' 'a-z-' <<<"$name")"
-  echo; echo "== ${name}"
+  [[ -n "$as" ]] && host="$as"
+  echo; echo "== ${name}${as:+  (installing the backup identity of ${as})}"
   installer="generated/agents/${cust}/${site}/backup/install-backup-${host}.ps1"
   registered=0
   awk -F'\t' -v c="$cust" -v s="$site" -v h="$host" '$1==c && $2==s && $3==h{f=1} END{exit !f}' generated/backup/machines.tsv 2>/dev/null && registered=1
