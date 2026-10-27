@@ -25,6 +25,22 @@ export function describeSchedule(days: number[], time: string): string {
   return `${who} at ${clock}`;
 }
 
+/** An audit action in plain words. */
+export function describeAction(action: string, detail: any): string {
+  switch (action) {
+    case "login": return "Signed in";
+    case "policy.set": return "Changed what is backed up";
+    case "schedule.set": return "Changed the backup schedule";
+    case "job.backup_now": return "Started a backup";
+    case "job.restore": {
+      const n = Array.isArray(detail?.params?.items) ? detail.params.items.length : 0;
+      return n ? `Restored ${n} ${n === 1 ? "item" : "items"}` : "Restored files";
+    }
+    case "job.find": case "catalog.search": return "Searched the backups";
+    default: return action;
+  }
+}
+
 export function when(iso: string | null | undefined): string {
   return iso ? new Date(iso).toLocaleString() : "never";
 }

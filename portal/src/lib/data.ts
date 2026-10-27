@@ -11,17 +11,19 @@ export type MachineRow = {
   result: string | null; last_run: string | null; last_success: string | null; files_new: string | null;
   data_added: string | null; bytes_processed: string | null; message: string | null; progress: any | null;
   has_policy: boolean;
+  sched_days: number[] | null; sched_time: string | null;
 };
 
 const MACHINE_SELECT = `
   SELECT m.id, m.customer_slug, m.site_slug, m.name, m.display_name, m.backup_enabled, m.last_seen, m.os_desc, m.agent_version,
          c.name AS customer_name,
          b.result, b.last_run, b.last_success, b.files_new, b.data_added, b.bytes_processed, b.message, b.progress,
-         (p.machine_id IS NOT NULL) AS has_policy
+         (p.machine_id IS NOT NULL) AS has_policy, sc.days AS sched_days, sc.at_time AS sched_time
     FROM machine m
     JOIN customer c ON c.slug = m.customer_slug
     LEFT JOIN backup_status b ON b.machine_id = m.id
     LEFT JOIN policy p ON p.machine_id = m.id
+    LEFT JOIN schedule sc ON sc.machine_id = m.id
    WHERE NOT m.retired AND ($1::text[] IS NULL OR m.customer_slug = ANY($1))`;
 
 export function listMachines(scope: Scope): Promise<MachineRow[]> {
@@ -131,6 +133,29 @@ export async function recentJobs(machineId: string, limit = 8) {
   return q<{ id: string; type: string; status: string; requested_by: string; requested_at: string; error: string | null }>(
     `SELECT id, type, status, requested_by, requested_at, error FROM job WHERE machine_id = $1 ORDER BY requested_at DESC LIMIT $2`,
     [machineId, limit]);
+}
+
+export type ActivityRow = { at: string; actor: string; action: string; ip: string | null; computer: string | null; customer: string | null; detail: any };
+
+// Routine reading (opening folders, listing backups) is audited but would drown the feed.
+const QUIET_ACTIONS = ["catalog.browse", "job.ls_snapshot", "job.list_snapshots"];
+
+/** The latest things people did, only for customers this person may see. Sign-ins carry no customer, so only administrators see them. */
+export async function recentActivity(scope: Scope, limit = 15): Promise<ActivityRow[]> {
+  return q<ActivityRow>(
+    `SELECT a.at, a.actor, a.action, a.ip, a.detail, COALESCE(m.display_name, m.name) AS computer, c.name AS customer
+       FROM audit a
+       LEFT JOIN machine m ON m.id = a.machine_id
+       LEFT JOIN customer c ON c.slug = a.customer_slug
+      WHERE ($1::text[] IS NULL OR a.customer_slug = ANY($1)) AND a.action <> ALL($3::text[])
+      ORDER BY a.at DESC LIMIT $2`, [visibleCustomers(scope), limit, QUIET_ACTIONS]);
+}
+
+export async function restoresLast30Days(scope: Scope): Promise<number> {
+  const r = await q1<{ n: string }>(
+    `SELECT count(*) AS n FROM audit WHERE action = 'job.restore' AND at > now() - interval '30 days' AND ($1::text[] IS NULL OR customer_slug = ANY($1))`,
+    [visibleCustomers(scope)]);
+  return Number(r?.n ?? 0);
 }
 
 export async function markInteractive(machineId: string) {

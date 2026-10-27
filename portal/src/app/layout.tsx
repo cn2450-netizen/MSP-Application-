@@ -1,6 +1,7 @@
 import "./globals.css";
 import type { Metadata } from "next";
 import { getScope } from "@/lib/session";
+import ThemeToggle from "./ThemeToggle";
 
 export const metadata: Metadata = { title: "Backup Portal", robots: { index: false, follow: false } };
 
@@ -14,6 +15,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           {scope && (
             <div className="who row">
               <span>{scope.name}{scope.admin ? " (administrator)" : ""}</span>
+              <ThemeToggle />
               <form action="/logout" method="post"><button type="submit" className="small">Sign out</button></form>
             </div>
           )}
