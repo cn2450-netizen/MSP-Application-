@@ -79,18 +79,18 @@ Trivy 0.75.0 (database of the same day) against the images the stack runs. Vulne
 | Image | Critical | High | Notes |
 |---|---|---|---|
 | Grafana 11.4.0 (23 months old) | 9 | 144 | Go standard library, OpenSSL, grpc, pgx, kin-openapi |
-| InfluxDB 2.7 | 18 | 324 | Go 1.18-1.23 toolchains inside the binary, Debian 12 packages |
+| InfluxDB 2.7 | 18 | 324 | Go 1.18-1.23 toolchains inside the binary, Debian 12 packages. **Updated the same day to 2.9.1: 2 critical (Debian zlib and sqlite, no fix yet), 160 high** |
 | MeshCentral 1.2.1 (our build) | 5 | 98 | handlebars, tar, proxy-addr, nodejs, postgresql client. **Updated the same day to 1.2.6 plus two patch pins: 0 critical, 11 high** |
 | restic rest-server 0.14.0 (17 months old) | 3 | 90 | Go standard library, OpenSSL. **Rebuilt the same day from source (Go 1.26, Alpine 3.24): 0 high or critical** |
 | nginx-unprivileged 1.27-alpine (gateway) | 2 | 56 | OpenSSL (CVE-2026-31789), libexpat, curl. **Updated the same day to 1.30.6-alpine3.24: 0 critical, 3 high (brotli, curl; fixed in the next Alpine point release)** |
 | Loki 3.3.2 (22 months old) | 2 | 58 | Go standard library, grpc |
 | authentik 2026.8.4 | 3 | 71 | libxml2, certifi (fix 2026.10.18), util-linux. **Updated the same day to 2026.8.5: 1 critical, 71 high. What remains is Debian base packages with no fix from Debian yet** |
-| postgres 16-alpine | 1 | 25 | Go standard library in the bundled helper |
+| postgres 16-alpine | 1 | 25 | Go standard library in the bundled helper (gosu). Already the newest image (16.15, Alpine 3.24); nothing newer exists, so accepted until the Docker library rebuilds it |
 | portal (our build) | 0 | 11 | npm build tooling packages only |
 
 Most findings are in old base images and in Go standard-library versions that a newer image release fixes. Which matter most depends on exposure: the gateway (nginx), the backup server (rest-server) and MeshCentral accept traffic from the internet through NPM, so they come first; Grafana, Loki and InfluxDB are reachable only behind authentik, NPM and the host firewall, or on the internal network. Whether a given CVE is reachable in this setup has not been analysed. A finding is a reason to update, not proof of compromise.
 
-The three internet-facing images (gateway, backup server, MeshCentral) were updated on 2026-10-27 and re-scanned; the table shows the original findings with the result noted. The isolation tests and all three backup-server test scripts pass on the new images. authentik was updated too. Grafana, Loki, InfluxDB and postgres are still to do.
+The three internet-facing images (gateway, backup server, MeshCentral) were updated on 2026-10-27 and re-scanned; the table shows the original findings with the result noted. The isolation tests and all three backup-server test scripts pass on the new images. authentik and InfluxDB were updated too; postgres has no newer image. Grafana and Loki are still to do.
 
 Reports are kept outside the repository. Re-run after every update; see ROADMAP.md.
 

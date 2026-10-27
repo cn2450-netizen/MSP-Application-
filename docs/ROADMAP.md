@@ -23,7 +23,7 @@
 | SSH hardening on the VM | Disable password login and root login, turn off X11 forwarding (key login is the only one in use) |
 | Self-service password reset and mail (SMTP) | No recovery flow today; an admin removes the authenticator for lost phones |
 | AD source (LDAPS) for staff | Staff are currently local authentik users |
-| Update the remaining container images | Done 2026-10-27: gateway nginx, rest-server (built from source), MeshCentral, authentik 2026.8.5. To do, in order: Grafana (2 years old), Loki, InfluxDB, postgres. Run the isolation and backup tests and re-scan after each |
+| Update the remaining container images | Done 2026-10-27: gateway nginx, rest-server (built from source), MeshCentral, authentik 2026.8.5, InfluxDB 2.9.1 (postgres has no newer image). To do: Grafana (2 years old), then Loki. InfluxDB hashed tokens must stay off unless you accept that downgrading then erases the API tokens. Run the isolation and backup tests and re-scan after each |
 | Hard power-off test, load test, authenticated web testing | Not run yet |
 | HIPAA/BAA review, risk analysis, customer agreements | Compliance work only you can do |
 | Approve-by-second-technician test through the real UI | Needs a second staff account; only tested at the database level |
