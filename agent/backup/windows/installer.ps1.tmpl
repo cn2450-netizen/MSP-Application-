@@ -46,8 +46,13 @@ $ResticSha   = '@@RESTIC_SHA256@@'
 $StartTime   = '@@TIME@@'
 $DefaultPaths = @('@@PATHS@@')
 $WrapperB64  = '@@WRAPPER_B64@@'
+$CommonB64   = '@@COMMON_B64@@'
+$PollB64     = '@@POLL_B64@@'
+$PortalUrl   = '@@PORTAL_URL@@'          # empty = this machine is not managed from the portal
+$AgentToken  = '@@AGENT_TOKEN@@'
 $ExcludesB64 = '@@EXCLUDES_B64@@'
 $TaskName    = 'MSPBackup'
+$PollTaskName = 'MSPBackupPoll'
 
 function Write-Step([string] $Message) { Write-Host "[MSP Backup] $Message" }
 
@@ -82,6 +87,7 @@ try {
 
     if ($Uninstall) {
         if ($existing) { Unregister-ScheduledTask -TaskName $TaskName -TaskPath $taskPath -Confirm:$false }
+        if (Get-ScheduledTask -TaskName $PollTaskName -TaskPath $taskPath -ErrorAction SilentlyContinue) { Unregister-ScheduledTask -TaskName $PollTaskName -TaskPath $taskPath -Confirm:$false }
         if (Test-Path $InstallDir) { Remove-Item -Recurse -Force -Path $InstallDir }
         Write-Step 'Uninstalled. Backups already stored on the server were not touched.'
         return
@@ -119,10 +125,13 @@ try {
         $noBom = New-Object Text.UTF8Encoding($false)
         [IO.File]::WriteAllBytes((Join-Path $InstallDir 'msp-backup.ps1'), [Convert]::FromBase64String($WrapperB64))
         [IO.File]::WriteAllBytes((Join-Path $InstallDir 'excludes.txt'),   [Convert]::FromBase64String($ExcludesB64))
+        [IO.File]::WriteAllBytes((Join-Path $InstallDir 'msp-common.ps1'), [Convert]::FromBase64String($CommonB64))
+        [IO.File]::WriteAllBytes((Join-Path $InstallDir 'msp-poll.ps1'),   [Convert]::FromBase64String($PollB64))
         [IO.File]::WriteAllText((Join-Path $InstallDir 'repo.pass'), $RepoPass, $noBom)
         $pathsToUse = if ($Paths -and $Paths.Count -gt 0) { @($Paths) } else { @($DefaultPaths) }
         $config = [ordered]@{ machine = $Machine; customer = $Customer; site = $Site; server_host = $ServerHost
                               rest_user = $RestUser; rest_pass = $RestPass; paths = $pathsToUse }
+        if ($PortalUrl -and $AgentToken) { $config.portal_url = $PortalUrl; $config.agent_token = $AgentToken }
         [IO.File]::WriteAllText((Join-Path $InstallDir 'config.json'), ($config | ConvertTo-Json), $noBom)
 
         # SYSTEM + Administrators only, by well-known SID (works on any Windows language). This folder holds secrets.
@@ -145,6 +154,19 @@ try {
         Register-ScheduledTask -TaskName $TaskName -TaskPath $taskPath -Action $action -Trigger $trigger `
             -Principal $taskUser -Settings $settings -Description 'MSP daily backup (restic, append-only server)' -Force | Out-Null
         Write-Step "Scheduled: daily at $StartTime (task \MSP\$TaskName)."
+
+        # The check-in task: every minute, outbound HTTPS only. It lets the portal show status, change the folder choice,
+        # list/search/restore backups and start a backup on demand. Skipped when this installer has no portal address.
+        if ($PortalUrl -and $AgentToken) {
+            $pAction   = New-ScheduledTaskAction -Execute 'powershell.exe' `
+                           -Argument ('-NoProfile -ExecutionPolicy Bypass -File "{0}"' -f (Join-Path $InstallDir 'msp-poll.ps1'))
+            $pTrigger  = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 1) -RepetitionDuration (New-TimeSpan -Days 3650)
+            $pSettings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew `
+                           -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Hours 12)
+            Register-ScheduledTask -TaskName $PollTaskName -TaskPath $taskPath -Action $pAction -Trigger $pTrigger `
+                -Principal $taskUser -Settings $pSettings -Description 'MSP backup portal check-in (outbound HTTPS only)' -Force | Out-Null
+            Write-Step "Portal check-in scheduled every minute (task \MSP\$PollTaskName)."
+        }
 
         if ($RunNow) { Start-ScheduledTask -TaskName $TaskName -TaskPath $taskPath; Write-Step 'First backup started now (see backup.log in the install folder).' }
         Write-Step "OK: '$Machine' is set up for backup. Backed-up scope: $($pathsToUse -join ', ')"

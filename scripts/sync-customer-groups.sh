@@ -13,12 +13,15 @@ app="$(ak_req GET core/applications/grafana/ | jq -r '.pk // empty')"
 ak_bind_group "$app" "$(ak_group msp-admins)"
 mesh_app="$(ak_req GET core/applications/meshcentral/ 2>/dev/null | jq -r '.pk // empty' || true)"
 [[ -n "$mesh_app" ]] && ak_bind_group "$mesh_app" "$(ak_group msp-admins)"
+portal_app="$(ak_req GET core/applications/portal/ 2>/dev/null | jq -r '.pk // empty' || true)"
+[[ -n "$portal_app" ]] && ak_bind_group "$portal_app" "$(ak_group msp-admins)"
 
 while IFS=$'\t' read -r slug _name _created; do
   [[ -z "${slug:-}" ]] && continue
   ak_bind_group "$app" "$(ak_group "tech-${slug}")"
   ak_bind_group "$app" "$(ak_group "cust-${slug}-users")"
   [[ -n "$mesh_app" ]] && ak_bind_group "$mesh_app" "$(ak_group "tech-${slug}")"   # staff only: not the customer's own users
+  if [[ -n "$portal_app" ]]; then ak_bind_group "$portal_app" "$(ak_group "tech-${slug}")"; ak_bind_group "$portal_app" "$(ak_group "cust-${slug}-users")"; fi
   echo "  ok  ${slug}"
 done < generated/customers.tsv
 echo "Groups allowed into Grafana:"

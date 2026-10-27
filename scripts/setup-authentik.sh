@@ -103,5 +103,26 @@ else
   echo "    skipped (MESH_HOST not set or secrets/meshcentral_oidc_secret missing; run scripts/init-secrets.sh)"
 fi
 
+echo "Backup Portal application (OIDC)"
+if [[ -n "${PORTAL_HOST:-}" && -s secrets/portal_oidc_secret ]]; then
+  portal_json="$(jq -n --arg af "$auth_flow" --arg inf "$inv_flow" --arg key "$key" --argjson maps "$maps"     --arg secret "$(cat secrets/portal_oidc_secret)" --arg redirect "https://${PORTAL_HOST}/auth/callback"     '{name:"Backup Portal",authorization_flow:$af,invalidation_flow:$inf,client_type:"confidential",
+      client_id:"portal",client_secret:$secret,
+      redirect_uris:[{matching_mode:"strict",url:$redirect}],
+      signing_key:$key,property_mappings:$maps,issuer_mode:"per_provider",
+      grant_types:["authorization_code"]}')"
+  pprov="$(ak_req GET 'providers/oauth2/?name=Backup%20Portal' | jq -r '.results[0].pk // empty')"
+  if [[ -n "$pprov" ]]; then ak_req PATCH "providers/oauth2/${pprov}/" "$portal_json" >/dev/null
+  else pprov="$(ak_req POST providers/oauth2/ "$portal_json" | jq -r '.pk')"; fi
+  papp_json="$(jq -n --argjson p "$pprov" --arg url "https://${PORTAL_HOST}/"     '{name:"Backup Portal",slug:"portal",provider:$p,meta_launch_url:$url,group:"Backup",open_in_new_tab:false}')"
+  if ak_req GET 'core/applications/portal/' >/dev/null 2>&1; then ak_req PATCH core/applications/portal/ "$papp_json" >/dev/null
+  else ak_req POST core/applications/ "$papp_json" >/dev/null; fi
+  papp="$(ak_req GET core/applications/portal/ | jq -r '.pk')"
+  # Staff of every customer, and each customer's own users (the portal itself limits them to their own machines).
+  ak_bind_group "$papp" "$admins"
+  echo "    Portal provider $pprov, application $papp, access limited to bound groups"
+else
+  echo "    skipped (PORTAL_HOST not set or secrets/portal_oidc_secret missing; run scripts/init-secrets.sh)"
+fi
+
 echo
 echo "Done. Next: sign in at https://${AUTH_HOST}/ as akadmin (password in secrets/authentik_bootstrap_password) — you will be asked to enrol an authenticator."

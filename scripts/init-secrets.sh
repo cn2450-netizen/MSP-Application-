@@ -31,6 +31,8 @@ gen grafana_oauth_secret
 gen meshcentral_db_password
 gen meshcentral_oidc_secret
 gen meshcentral_session_key 48
+gen portal_db_password
+gen portal_oidc_secret
 
 [[ -e .env ]] || { cp .env.example .env; echo "Created .env — edit hostnames before 'docker compose up'."; }
 chmod 600 .env

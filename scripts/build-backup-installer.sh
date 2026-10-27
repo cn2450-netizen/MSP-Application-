@@ -27,11 +27,23 @@ done
 cred="generated/backup/credentials/${cust}/${site}/${host}.txt"
 [[ -f "$cred" ]] || { echo "no credentials for ${cust}/${site}/${host}: run scripts/backup-add-machine.sh ${cust} ${site} ${host}" >&2; exit 1; }
 
+# Portal check-in: needs the portal address and a per-machine token. Best-effort: without them the installer still
+# schedules the daily backup, it just cannot be managed from the portal.
+portal_url="" agent_token=""
+if [[ -n "${PORTAL_HOST:-}" ]]; then
+  if scripts/portal-register-machine.sh "$cust" "$site" "$host" >/dev/null 2>&1; then
+    portal_url="https://${PORTAL_HOST}"
+    agent_token="$(sed -n 's/^portal token:[[:space:]]*//p' "$cred")"
+  else
+    echo "WARNING: could not register ${host} in the portal; the installer will not include portal check-in" >&2
+  fi
+fi
+
 out_dir="generated/agents/${cust}/${site}/backup"
 mkdir -p "$out_dir"; out="${out_dir}/install-backup-${host}.ps1"
 
 CUST="$cust" SITE="$site" HOST="$host" PATHS="$paths" WHEN="$when" CRED="$cred" OUT="$out" \
-SERVER_HOST="${BACKUP_HOST:?BACKUP_HOST not set in .env}" \
+SERVER_HOST="${BACKUP_HOST:?BACKUP_HOST not set in .env}" PORTAL_URL="$portal_url" AGENT_TOKEN="$agent_token" \
 RESTIC_URL="${RESTIC_URL_BASE}/${RESTIC_WINDOWS_AMD64_FILE}" RESTIC_SHA="${RESTIC_WINDOWS_AMD64_SHA256}" \
 python3 - <<'PY'
 import base64, hashlib, os, re, sys
@@ -52,22 +64,28 @@ if not when:   # deterministic slot in 01:00-04:59 from the machine name
 
 if e["PATHS"] == "ALL": paths = ["ALL"]
 else: paths = [p.strip() for p in e["PATHS"].split(";") if p.strip()]
+for k in ("PORTAL_URL", "AGENT_TOKEN"):
+    if e[k] and not re.fullmatch(r"[A-Za-z0-9.:/_-]+", e[k]): sys.exit(f"{k} has unexpected characters")
 if any(("'" in p or "\n" in p or "\r" in p) for p in paths): sys.exit("paths must not contain quotes or line breaks")
 paths_ps = "','".join(paths)
 
 root = "agent/backup/windows/"
 wrapper = open(root + "msp-backup.ps1", "rb").read()
 excl = open(root + "excludes.txt", "rb").read()
+common = open(root + "msp-common.ps1", "rb").read()
+poll = open(root + "msp-poll.ps1", "rb").read()
 site_file = f"{root}excludes.site/{e['CUST']}-{e['SITE']}.txt"
 if os.path.exists(site_file):
     excl += b"\n# --- site-specific (" + site_file.encode() + b") ---\n" + open(site_file, "rb").read()
-for name, data in (("msp-backup.ps1", wrapper), ("excludes.txt", excl)):
+for name, data in (("msp-backup.ps1", wrapper), ("excludes.txt", excl), ("msp-common.ps1", common), ("msp-poll.ps1", poll)):
     try: data.decode("ascii")
     except UnicodeDecodeError: sys.exit(f"{name} must be ASCII only (Windows PowerShell 5.1 mis-reads UTF-8 without a BOM)")
 
 tpl = open(root + "installer.ps1.tmpl", encoding="utf-8").read()
 subs = {"MACHINE": e["HOST"], "CUSTOMER": e["CUST"], "SITE": e["SITE"], "SERVER_HOST": e["SERVER_HOST"],
         "REST_USER": vals["server user"], "REST_PASS": vals["server password"], "REPO_PASS": vals["repo password"],
+        "PORTAL_URL": e["PORTAL_URL"], "AGENT_TOKEN": e["AGENT_TOKEN"],
+        "COMMON_B64": base64.b64encode(common).decode(), "POLL_B64": base64.b64encode(poll).decode(),
         "RESTIC_URL": e["RESTIC_URL"], "RESTIC_SHA256": e["RESTIC_SHA"], "TIME": when, "PATHS": paths_ps,
         "WRAPPER_B64": base64.b64encode(wrapper).decode(), "EXCLUDES_B64": base64.b64encode(excl).decode()}
 for k, v in subs.items():
