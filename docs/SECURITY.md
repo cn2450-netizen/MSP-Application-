@@ -84,13 +84,13 @@ Trivy 0.75.0 (database of the same day) against the images the stack runs. Vulne
 | restic rest-server 0.14.0 (17 months old) | 3 | 90 | Go standard library, OpenSSL. **Rebuilt the same day from source (Go 1.26, Alpine 3.24): 0 high or critical** |
 | nginx-unprivileged 1.27-alpine (gateway) | 2 | 56 | OpenSSL (CVE-2026-31789), libexpat, curl. **Updated the same day to 1.30.6-alpine3.24: 0 critical, 3 high (brotli, curl; fixed in the next Alpine point release)** |
 | Loki 3.3.2 (22 months old) | 2 | 58 | Go standard library, grpc |
-| authentik 2026.8.4 | 3 | 71 | libxml2, certifi (fix 2026.10.18), util-linux |
+| authentik 2026.8.4 | 3 | 71 | libxml2, certifi (fix 2026.10.18), util-linux. **Updated the same day to 2026.8.5: 1 critical, 71 high. What remains is Debian base packages with no fix from Debian yet** |
 | postgres 16-alpine | 1 | 25 | Go standard library in the bundled helper |
 | portal (our build) | 0 | 11 | npm build tooling packages only |
 
 Most findings are in old base images and in Go standard-library versions that a newer image release fixes. Which matter most depends on exposure: the gateway (nginx), the backup server (rest-server) and MeshCentral accept traffic from the internet through NPM, so they come first; Grafana, Loki and InfluxDB are reachable only behind authentik, NPM and the host firewall, or on the internal network. Whether a given CVE is reachable in this setup has not been analysed. A finding is a reason to update, not proof of compromise.
 
-The three internet-facing images (gateway, backup server, MeshCentral) were updated on 2026-10-27 and re-scanned; the table shows the original findings with the result noted. The isolation tests and all three backup-server test scripts pass on the new images. Authentik, Grafana, Loki, InfluxDB and postgres are still to do.
+The three internet-facing images (gateway, backup server, MeshCentral) were updated on 2026-10-27 and re-scanned; the table shows the original findings with the result noted. The isolation tests and all three backup-server test scripts pass on the new images. authentik was updated too. Grafana, Loki, InfluxDB and postgres are still to do.
 
 Reports are kept outside the repository. Re-run after every update; see ROADMAP.md.
 
