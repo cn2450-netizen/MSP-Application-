@@ -36,7 +36,7 @@ say() { printf '\n== %s\n' "$*"; }
 say "Packages"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq ca-certificates curl gnupg open-iscsi cryptsetup xfsprogs git jq openssl >/dev/null
+apt-get install -y -qq ca-certificates curl gnupg open-iscsi cryptsetup xfsprogs git jq openssl apache2-utils bzip2 >/dev/null
 # Debian 13 ships the crypttab boot-time generator separately; without it /etc/crypttab is silently ignored.
 apt-get install -y -qq systemd-cryptsetup >/dev/null 2>&1 || true
 

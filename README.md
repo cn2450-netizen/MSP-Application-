@@ -161,6 +161,19 @@ Customer-machine backups (Restic) are stored on the NAS, not on the platform vol
 
 NAS side (TrueNAS SCALE 25.10): dataset `Share/msp-backups` (quota, 1 MiB records, POSIX ACLs, mode 750, owner `restic-svc` uid 1500 / gid 3002), NFS share restricted to the VM's storage address with Mapall `restic-svc`, plus a daily ZFS snapshot task. S3 (e.g. Wasabi) is planned later as a cold tier by copying long-lived snapshots with `restic copy`.
 
+### Backup server (Restic REST server)
+
+`restic-server` (compose) serves repositories on the NAS share with **`--append-only`** (clients can add backups but never delete or alter existing ones; a ransomware-infected machine cannot erase its history) and **`--private-repos`** (each machine's login reaches only its own repository). Each machine gets its own login, its own repository and its own encryption password:
+
+```bash
+sudo scripts/install-restic.sh                              # pinned, checksum-verified restic on the VM (once)
+scripts/backup-add-machine.sh acme main dc01                # login + repo + passwords -> generated/backup/credentials/acme/main/dc01.txt
+scripts/backup-remove-machine.sh acme main dc01             # cut off access; data kept on the NAS
+scripts/backup-remove-machine.sh acme main dc01 --delete-backups   # PERMANENT: also delete the repository
+```
+
+The repository password in that credentials file is the only way to read the backups: copy it to your vault. Retention and pruning are done on the VM against the local NAS path (never through the append-only server). The container refuses to start unless the NAS marker file is visible, so it can never write to the VM's disk. Put it behind NPM at `backup.<domain>` (WebSockets not needed; set `client_max_body_size 0;`, `proxy_request_buffering off;`, `proxy_read_timeout 600s;`; use a DNS-only Cloudflare record, since proxying large backup uploads through Cloudflare is limited and against its terms for non-web content).
+
 ## Agent footprint and outage buffering
 
 Measured on Telegraf 1.40.2 / Windows: the program is ~315 MB on disk (the agent log is capped at ~20 MB); an idle agent uses ~97 MB of RAM. Collected data is **never written to disk**: during an outage it waits in RAM (200,000 metrics, ~66 hours, ~140 MB; 5,000 event-log entries, ~85 MB), oldest dropped first when full. Both buffers completely full is ~330 MB (~500 MB allowing for Go GC slack), well inside a 1 GB ceiling. A restart or reboot during an outage loses what is buffered, and event-log entries written while the agent is stopped are not sent. Costs per item are in the comments of `agent/windows/telegraf.conf.tmpl`; re-measure before raising the limits.

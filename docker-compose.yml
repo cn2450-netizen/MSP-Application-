@@ -198,3 +198,32 @@ services:
     networks: [edge, backend]
     depends_on:
       postgres: { condition: service_healthy }
+
+  # Customer-machine backups: the Restic REST server (backups land on the NAS share mounted at BACKUP_DIR).
+  #  --append-only    a compromised customer machine can ADD backups but never delete or alter existing ones
+  #  --private-repos  each machine's login reaches only its own repository (path = its username)
+  # Retention/pruning runs on the host against the local NAS path (scripts/backup-maintain.sh), never through this
+  # server. The start command refuses to run unless the NAS marker file is visible, so an unmounted share can never
+  # make it write to the VM's own disk. rslave lets a share that mounts AFTER the container started still appear.
+  restic-server:
+    <<: *common
+    image: restic/rest-server:${RESTIC_SERVER_TAG}
+    user: "1500:3002"
+    read_only: true
+    cap_drop: [ALL]
+    tmpfs:
+      - /tmp
+    entrypoint:
+      - /bin/sh
+      - -c
+      - "[ -f /data/.msp-backup-root ] || { echo 'backup share not mounted (marker file missing): refusing to start' >&2; exit 1; }; exec rest-server --path /data --htpasswd-file /etc/restic/htpasswd --append-only --private-repos --listen :8000 --log -"
+    volumes:
+      - type: bind
+        source: ${BACKUP_DIR}
+        target: /data
+        bind:
+          propagation: rslave
+      - ./generated/restic/htpasswd:/etc/restic/htpasswd:ro
+    ports:
+      - "${BIND_ADDR}:${RESTIC_PORT}:8000"
+    networks: [edge]

@@ -8,7 +8,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 umask 077
-mkdir -p secrets generated/gateway
+mkdir -p secrets generated/gateway generated/restic
 chmod 700 secrets
 
 gen() { # gen <name> [bytes]
@@ -45,6 +45,8 @@ chmod 700 generated
 chmod 755 generated/gateway
 chmod 644 generated/gateway/loki.map
 [[ -e generated/customers.tsv ]]    || : > generated/customers.tsv
+[[ -e generated/restic/htpasswd ]]  || : > generated/restic/htpasswd   # backup-server logins, one per machine
+chmod 755 generated/restic; chmod 644 generated/restic/htpasswd
 
 "$(dirname "$0")/render-config.sh"
 
