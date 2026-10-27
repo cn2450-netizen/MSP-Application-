@@ -223,7 +223,9 @@ services:
         target: /data
         bind:
           propagation: rslave
-      - ./generated/restic/htpasswd:/etc/restic/htpasswd:ro
+      # Mount the DIRECTORY, not the file: scripts replace htpasswd with mv, which creates a new inode, and a
+      # single-file bind mount would keep showing the old one (new logins would be rejected after any removal).
+      - ./generated/restic:/etc/restic:ro
     ports:
       - "${BIND_ADDR}:${RESTIC_PORT}:8000"
     networks: [edge]
