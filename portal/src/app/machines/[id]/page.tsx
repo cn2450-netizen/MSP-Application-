@@ -4,6 +4,7 @@ import { getMachine, getPolicy, recentJobs, health } from "@/lib/data";
 import { isStaffFor } from "@/lib/authz";
 import { ago, bytes, when } from "@/lib/format";
 import BackupNow from "./BackupNow";
+import Heartbeat from "./Heartbeat";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,7 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
 
   return (
     <>
+      <Heartbeat machineId={m.id} />
       <p className="small"><a href="/">&larr; All computers</a></p>
       <div className="row">
         <div className="grow">
