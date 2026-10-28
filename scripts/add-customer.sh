@@ -103,6 +103,7 @@ docker compose up -d grafana   # recreates the container so the new org mapping 
 echo
 echo "First site: main"
 scripts/add-site.sh "$slug" main "Main site"
+scripts/update-customer-hub.sh || echo "  (the customer picker was not updated; run scripts/update-customer-hub.sh)"
 
 trap - ERR
 echo

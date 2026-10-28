@@ -139,6 +139,7 @@ else
 fi
 awk -F'\t' -v c="$slug" '$1!=c' generated/customers.tsv > generated/customers.tsv.new && mv generated/customers.tsv.new generated/customers.tsv
 scripts/render-config.sh >/dev/null && docker compose up -d grafana >/dev/null 2>&1 && echo "grafana: org mapping reloaded"
+sleep 8; scripts/update-customer-hub.sh || echo "  (the customer picker was not updated; run scripts/update-customer-hub.sh)"
 audit "purged"
 echo
 echo "Purged. A line was added to generated/offboard-audit.log. Remember the customer's vault entries (repo passwords) and any off-site copies."

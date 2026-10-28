@@ -183,7 +183,10 @@ panels.append({"id": 9, "type": "row", "title": "Trends", "collapsed": True,
 
 dashboard = {
     "uid": "windows-overview", "title": "Windows Overview", "tags": ["msp", "windows"],
-    "schemaVersion": 39, "version": 3, "refresh": "1m",
+    "schemaVersion": 39, "version": 4, "refresh": "1m",
+    # Back to the customer picker (scripts/update-customer-hub.sh): it lives in the default org, id 1.
+    "links": [{"title": "All customers", "type": "link", "icon": "apps", "tooltip": "Pick another customer",
+               "url": "/d/msp-customers?orgId=1", "targetBlank": False}],
     "time": {"from": "now-6h", "to": "now"},
     "templating": {"list": [{
         "name": "host", "label": "Host", "type": "query", "datasource": INFLUX,

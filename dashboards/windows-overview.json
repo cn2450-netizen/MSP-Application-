@@ -6,8 +6,18 @@
     "windows"
   ],
   "schemaVersion": 39,
-  "version": 3,
+  "version": 4,
   "refresh": "1m",
+  "links": [
+    {
+      "title": "All customers",
+      "type": "link",
+      "icon": "apps",
+      "tooltip": "Pick another customer",
+      "url": "/d/msp-customers?orgId=1",
+      "targetBlank": false
+    }
+  ],
   "time": {
     "from": "now-6h",
     "to": "now"
