@@ -50,7 +50,7 @@ if [[ "$count" -gt 1 && "$yes" != 1 ]]; then echo "That is ${count} devices: re-
 CT=/tmp/msp-backup-install.ps1   # transient copy inside the container
 REMOTE_DIR='C:\Windows\Temp\'
 REMOTE_FILE='C:\Windows\Temp\msp-backup-install.ps1'
-cleanup_container() { docker compose exec -T meshcentral rm -f -- "$CT" >/dev/null 2>&1 || true; }
+cleanup_container() { docker compose exec -T meshcentral rm -f -- "$CT" </dev/null >/dev/null 2>&1 || true; }
 trap cleanup_container EXIT
 
 ok=0 failed=0 skipped=0
@@ -88,9 +88,9 @@ while read -r dev; do
       --url ws://127.0.0.1:4430 --loginuser "$MESH_USER" --loginpass "$MESH_PASS" </dev/null 2>&1 || true)"
   mc RunCommand --id "$id" --run "del /f /q \"${REMOTE_FILE}\"" >/dev/null || true     # remove the installer (holds backup passwords)
   cleanup_container
-  echo "$reply" | grep -E '^\[MSP Backup\]|WARNING|rror|refus' | sed 's/^/  /' | tail -8
+  { echo "$reply" | grep -E '^\[MSP Backup\]|WARNING|rror|refus' | sed 's/^/  /' | tail -8; } || true   # no match must not abort the run
   if grep -q "OK: '" <<<"$reply"; then ok=$((ok+1)); echo "  RESULT: backup installed/updated"
-  else failed=$((failed+1)); echo "  RESULT: not confirmed; raw output tail:"; echo "$reply" | tail -6 | sed 's/^/    /'; fi
+  else failed=$((failed+1)); echo "  RESULT: not confirmed; raw output tail:"; { echo "$reply" | tail -6 | sed 's/^/    /'; } || true; fi
 done < <(jq -c '.[]' <<<"$devices")
 
 echo; echo "Done: ${ok} confirmed, ${failed} not confirmed, ${skipped} skipped."
