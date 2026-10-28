@@ -22,6 +22,7 @@ set -a; source .env; set +a
 
 KEEP_DAILY="${KEEP_DAILY:-7}" KEEP_WEEKLY="${KEEP_WEEKLY:-4}" KEEP_MONTHLY="${KEEP_MONTHLY:-6}"
 MAX_AGE_HOURS="${MAX_AGE_HOURS:-36}"
+GRACE_DAYS="${GRACE_DAYS:-7}"      # a machine registered less than this long ago may still be waiting for its first backup
 RESTORE_SAMPLE="${RESTORE_SAMPLE:-3}"
 BUSY_MINUTES="${BUSY_MINUTES:-30}"
 BK="${BACKUP_DIR:-/srv/msp-backups}"
@@ -71,7 +72,10 @@ while IFS=$'\t' read -r cust site host user _created; do
   newest="$(jq -r '[.[].time] | max // empty' <<<"$snaps")"
   age_h=-1
   if [[ -n "$newest" ]]; then age_h=$(( ( $(date +%s) - $(date -d "$newest" +%s) ) / 3600 )); fi
-  if [[ "$count" == 0 ]]; then fail "no snapshots yet"
+  reg_age_d=-1; [[ -n "${_created:-}" ]] && reg_age_d=$(( ( $(date +%s) - $(date -d "$_created" +%s 2>/dev/null || echo 0) ) / 86400 ))
+  if [[ "$count" == 0 ]]; then
+    if (( reg_age_d >= 0 && reg_age_d < GRACE_DAYS )); then status="waiting"; notes+=("waiting for the first backup (registered ${reg_age_d}d ago, grace ${GRACE_DAYS}d)")
+    else fail "no snapshots yet"; fi
   elif (( age_h > MAX_AGE_HOURS )); then fail "newest snapshot is ${age_h}h old (limit ${MAX_AGE_HOURS}h)"; fi
 
   pruned="skipped"
@@ -112,7 +116,7 @@ while IFS=$'\t' read -r cust site host user _created; do
   printf '%s: %s  snapshots=%s newest=%sh stored=%sMiB prune=%s check=%s restore=%s%s\n' "$user" "$status" "$count" "$age_h" \
     "$(( size / 1048576 ))" "$pruned" "$checked" "$restored" "$([[ ${#notes[@]} -gt 0 ]] && printf '  [%s]' "$(IFS=';'; echo "${notes[*]}")")"
   printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$(date -u +%FT%TZ)" "$user" "$status" "$count" "$size" "${notes[*]:-}" >> generated/backup/maintenance.tsv
-  [[ "$status" == ok ]] || fails=$((fails+1))
+  [[ "$status" == ok || "$status" == waiting ]] || fails=$((fails+1))
   unset RESTIC_PASSWORD
 done < generated/backup/machines.tsv
 
