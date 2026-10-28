@@ -1,26 +1,38 @@
 import "./globals.css";
 import type { Metadata } from "next";
 import { getScope } from "@/lib/session";
+import { getView } from "@/lib/view";
 import ThemeToggle from "./ThemeToggle";
+import ScopePicker from "./ScopePicker";
+import Nav from "./Nav";
 
-export const metadata: Metadata = { title: "Backup Portal", robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: "MSP Portal", robots: { index: false, follow: false } };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const scope = await getScope();
+  const view = scope ? await getView(scope) : null;
   return (
     <html lang="en">
       <body>
-        <header className="top">
-          <a className="brand" href="/">Backup Portal</a>
-          {scope && (
-            <div className="who row">
-              <span>{scope.name}{scope.admin ? " (administrator)" : ""}</span>
-              <ThemeToggle />
-              <form action="/logout" method="post"><button type="submit" className="small">Sign out</button></form>
+        {scope && view ? (
+          <div className="shell">
+            <aside>
+              <a className="brand" href="/">MSP Portal</a>
+              <Nav />
+            </aside>
+            <div className="col">
+              <header className="top">
+                <ScopePicker customers={view.customers} customer={view.customer} site={view.site} />
+                <div className="who row">
+                  <span>{scope.name}{scope.admin ? " (administrator)" : ""}</span>
+                  <ThemeToggle />
+                  <form action="/logout" method="post"><button type="submit" className="small">Sign out</button></form>
+                </div>
+              </header>
+              <main>{children}</main>
             </div>
-          )}
-        </header>
-        <main>{children}</main>
+          </div>
+        ) : <main>{children}</main>}
       </body>
     </html>
   );

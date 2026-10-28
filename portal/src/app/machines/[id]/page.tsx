@@ -31,7 +31,7 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
   return (
     <>
       <Heartbeat machineId={m.id} />
-      <p className="small"><a href="/">&larr; All computers</a></p>
+      <p className="small"><a href="/backups">&larr; All computers</a></p>
       <div className="row">
         <div className="grow">
           <h1>{m.display_name || m.name}</h1>

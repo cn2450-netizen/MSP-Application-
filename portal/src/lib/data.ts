@@ -219,3 +219,16 @@ export function health(m: Pick<MachineRow, "result" | "last_success" | "backup_e
   if (hours > 30 || m.result === "partial") return { key: "warn", label: "Needs a look" };
   return { key: "ok", label: "Protected" };
 }
+
+export type CustomerRow = { slug: string; name: string; sites: string[]; computers: number };
+
+/** The customers this person may see, with their sites and how many computers are set up for backup. */
+export async function listCustomers(scope: Scope): Promise<CustomerRow[]> {
+  return q<CustomerRow>(
+    `SELECT c.slug, c.name,
+            COALESCE((SELECT array_agg(s.slug ORDER BY s.slug) FROM site s WHERE s.customer_slug = c.slug), '{}') AS sites,
+            (SELECT count(*)::int FROM machine m WHERE m.customer_slug = c.slug AND NOT m.retired) AS computers
+       FROM customer c
+      WHERE ($1::text[] IS NULL OR c.slug = ANY($1))
+      ORDER BY c.name`, [visibleCustomers(scope)]);
+}

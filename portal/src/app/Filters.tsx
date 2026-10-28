@@ -3,7 +3,7 @@
 // The filter bar: each choice submits at once (a plain GET form, so the page stays a server page and the URL is shareable).
 export default function Filters({ fields }: { fields: { name: string; label: string; value: string; options: { value: string; label: string }[] }[] }) {
   return (
-    <form method="get" action="/" className="filters">
+    <form method="get" action="/backups" className="filters">
       {fields.map((f) => (
         <label key={f.name}>
           <span>{f.label}</span>
