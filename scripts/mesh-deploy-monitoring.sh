@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Push a site's monitoring-agent installer to its online Windows machines through MeshCentral and run it.
-#   scripts/mesh-deploy-monitoring.sh <customer> <site> [--device NAME] [--yes]
+#   scripts/mesh-deploy-monitoring.sh <customer> <site> [--device NAME[,NAME...]] [--yes]
 #
 # For each online device in the group "<customer> / <site>" it: uploads the installer to C:\Windows\Temp,
 # runs it (the MeshCentral agent runs as SYSTEM, so it has the rights), reports the installer's result,
@@ -13,7 +13,7 @@ cd "$(dirname "$0")/.."
 set -a; source .env; set +a
 source scripts/lib/meshcentral.sh
 
-cust="${1:?usage: mesh-deploy-monitoring.sh <customer> <site> [--device NAME] [--yes]}"
+cust="${1:?usage: mesh-deploy-monitoring.sh <customer> <site> [--device NAME[,NAME...]] [--yes]}"
 site="${2:?site required}"; shift 2
 only="" yes=0
 while [[ $# -gt 0 ]]; do
@@ -32,36 +32,49 @@ gname="${cust} / ${site}"
 [[ -n "$(mesh_group_id "$gname")" ]] || { echo "no device group '${gname}': run scripts/mesh-site.sh ${cust} ${site}" >&2; exit 1; }
 
 devices="$(mc ListDevices --group "$gname" --json | jq -c '[.[]|select(((.conn // 0) % 2) == 1)]' 2>/dev/null || echo '[]')"
-[[ -n "$only" ]] && devices="$(jq -c --arg n "$only" '[.[]|select(.name==$n)]' <<<"$devices")"
+[[ -n "$only" ]] && devices="$(jq -c --arg n "$only" '[.[]|select(.name as $x | ($n|split(",")|index($x)) != null)]' <<<"$devices")"
 count="$(jq length <<<"$devices")"
 if [[ "$count" == 0 ]]; then echo "No online devices in '${gname}'${only:+ matching '${only}'}."; exit 0; fi
 echo "Online devices in '${gname}':"; jq -r '.[]|"  \(.name)  (\(.osdesc // "?"))"' <<<"$devices"
 if [[ "$count" -gt 1 && "$yes" != 1 ]]; then echo "That is ${count} devices: re-run with --yes to deploy to all of them, or --device NAME for one." >&2; exit 1; fi
 
-CT=/tmp/msp-install.ps1          # transient copy inside the container
 REMOTE_DIR='C:\Windows\Temp\'
 REMOTE_FILE='C:\Windows\Temp\msp-install.ps1'
-cleanup_container() { docker compose exec -T meshcentral rm -f -- "$CT" >/dev/null 2>&1 || true; }
-trap cleanup_container EXIT
+MAXPAR="${MSP_DEPLOY_PARALLEL:-4}"      # devices installed at the same time (each one downloads the agent from the vendor)
+tmpd="$(mktemp -d)"
+cleanup() { docker compose exec -T meshcentral sh -c 'rm -rf /tmp/d-*' >/dev/null 2>&1 || true; rm -rf -- "$tmpd"; }
+trap cleanup EXIT
 
-ok=0 failed=0
-while read -r dev; do
+# One device: its output goes to its own log so parallel runs do not interleave. Every path ends in a RESULT line.
+deploy_one() {   # deploy_one <device-json> <logfile>
+  local dev="$1" log="$2" id name dir ct up reply
   id="$(jq -r '._id' <<<"$dev")"; name="$(jq -r '.name' <<<"$dev")"
-  echo; echo "== ${name}"
-  # Written through a pipe as the container's own unprivileged user (it has no capabilities, so no chown is possible
-  # or needed): the file is created owned by that user, mode 600.
-  docker compose exec -T meshcentral sh -c "umask 077; cat > ${CT}" < "$installer"
-  up="$(mc Upload --id "$id" --file "$CT" --target "$REMOTE_DIR")"
-  echo "  upload: $(tr '\n' ' ' <<<"$up" | cut -c1-120)"
-  reply="$(timeout 420 docker compose exec -T meshcentral node "$MESH_CTL" RunCommand --id "$id" --reply \
-      --run "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"${REMOTE_FILE}\"" \
-      --url ws://127.0.0.1:4430 --loginuser "$MESH_USER" --loginpass "$MESH_PASS" </dev/null 2>&1 || true)"
-  mc RunCommand --id "$id" --run "del /f /q \"${REMOTE_FILE}\"" >/dev/null || true     # remove the installer (holds the site keys)
-  cleanup_container
-  echo "$reply" | grep -E '^\[MSP Agent\]|WARNING|rror' | sed 's/^/  /' | tail -8
-  if grep -q "OK: " <<<"$reply"; then ok=$((ok+1)); echo "  RESULT: installed/updated"
-  else failed=$((failed+1)); echo "  RESULT: not confirmed; raw output tail:"; echo "$reply" | tail -6 | sed 's/^/    /'; fi
-done < <(jq -c '.[]' <<<"$devices")
+  dir="/tmp/d-$(tr -c 'A-Za-z0-9' '_' <<<"$id" | cut -c1-40)"; ct="${dir}/msp-install.ps1"
+  {
+    echo; echo "== ${name}"
+    # Written through a pipe as the container's own unprivileged user (no capabilities, so no chown is possible or
+    # needed): the file is created owned by that user, mode 600.
+    docker compose exec -T meshcentral sh -c "umask 077; mkdir -p ${dir}; cat > ${ct}" < "$installer"
+    up="$(mc Upload --id "$id" --file "$ct" --target "$REMOTE_DIR")"
+    echo "  upload: $(tr '
+' ' ' <<<"$up" | cut -c1-120)"
+    reply="$(timeout 420 docker compose exec -T meshcentral node "$MESH_CTL" RunCommand --id "$id" --reply         --run "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"${REMOTE_FILE}\""         --url ws://127.0.0.1:4430 --loginuser "$MESH_USER" --loginpass "$MESH_PASS" </dev/null 2>&1 || true)"
+    mc RunCommand --id "$id" --run "del /f /q \"${REMOTE_FILE}\"" >/dev/null || true     # remove the installer (holds the site keys)
+    docker compose exec -T meshcentral rm -rf -- "$dir" >/dev/null 2>&1 || true
+    { grep -E '^\[MSP Agent\]|WARNING|rror' <<<"$reply" | sed 's/^/  /' | tail -8; } || true
+    if grep -q "OK: " <<<"$reply"; then echo "  RESULT: installed/updated"
+    else echo "  RESULT: not confirmed; raw output tail:"; { tail -6 <<<"$reply" | sed 's/^/    /'; } || true; fi
+  } >"$log" 2>&1
+}
 
+n=0
+while read -r dev; do
+  while [[ "$(jobs -rp | wc -l)" -ge "$MAXPAR" ]]; do sleep 2; done
+  n=$((n+1)); deploy_one "$dev" "${tmpd}/$(printf '%03d' "$n").log" </dev/null &   # </dev/null: a background job must not read the device list
+done < <(jq -c '.[]' <<<"$devices")
+wait
+cat "$tmpd"/*.log
+ok="$(cat "$tmpd"/*.log | grep -c 'RESULT: installed')" || true
+failed=$((count - ok))
 echo; echo "Done: ${ok} confirmed, ${failed} not confirmed."
 [[ "$failed" == 0 ]]
