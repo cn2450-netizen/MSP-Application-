@@ -43,6 +43,7 @@ Commands run on the VM in the app directory (`/srv/msp/app`) unless noted.
 | Show protected / stale computers | `sudo scripts/backup-list.sh <customer> <site>` |
 | Browse a backup on the host | `sudo scripts/backup-restore.sh <customer> <site> <host> --list` |
 | Push a dashboard change | Edit `dashboards/build_windows_overview.py`, run it, then `scripts/update-dashboards.sh` |
+| Refresh the Grafana customer picker | `scripts/update-customer-hub.sh` (add-customer and offboard-customer do it for you). It is the home page of the "MSP Overview" org: one tile per customer, plus an "All customers" link on every customer dashboard. Links only, no data source |
 | End a customer | `scripts/offboard-customer.sh <customer> --suspend` then later `--purge --confirm <customer>` |
 
 ## MeshCentral login token
