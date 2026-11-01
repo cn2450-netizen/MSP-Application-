@@ -44,6 +44,8 @@ export default async function Encryption({ searchParams }: { searchParams: Promi
       </p>
       <EncryptionPanel
         customer={customer} host={host} volume={volume}
+        customers={view.customers.filter((x) => staff(x.slug)).map((x) => ({ slug: x.slug, name: x.name }))}
+        defaultCustomer={customer ?? view.customer}
         companyName={customer ? names.get(customer) ?? customer : null}
         keys={keys.map((k) => ({ ...k, collected_at: String(k.collected_at), company: names.get(k.customer_slug) ?? k.customer_slug }))}
         requests={requests.map((r) => ({ ...r, requested_at: String(r.requested_at), finished_at: r.finished_at ? String(r.finished_at) : null, company: names.get(r.customer_slug) ?? r.customer_slug }))}

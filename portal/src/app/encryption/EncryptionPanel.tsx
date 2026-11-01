@@ -11,9 +11,13 @@ type Req = {
 const when = (s: string) => new Date(s).toLocaleString();
 const STATUS: Record<Req["status"], string> = { pending: "Waiting", running: "Working", done: "Done", failed: "Failed", cancelled: "Cancelled" };
 
-export default function EncryptionPanel(p: { customer: string | null; host: string | null; volume: string | null; companyName: string | null; keys: Key[]; requests: Req[] }) {
+export default function EncryptionPanel(p: { customer: string | null; host: string | null; volume: string | null; companyName: string | null; customers: { slug: string; name: string }[]; defaultCustomer: string; keys: Key[]; requests: Req[] }) {
   const router = useRouter();
   const [vol, setVol] = useState(p.volume ?? "");
+  const [pickCust, setPickCust] = useState(p.defaultCustomer || p.customers[0]?.slug || "");
+  const [pickHost, setPickHost] = useState("");
+  const customer = p.customer ?? pickCust;
+  const host = p.host ?? pickHost.trim().toLowerCase().replace(/[^a-z0-9-]/g, "");
   const [msg, setMsg] = useState<{ kind: "info" | "bad"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [reveal, setReveal] = useState<{ id: string; reason: string } | null>(null);
@@ -45,12 +49,12 @@ export default function EncryptionPanel(p: { customer: string | null; host: stri
   }
 
   async function request(action: "enable" | "escrow") {
-    if (!p.customer || !p.host || !/^[A-Za-z]$/.test(vol)) return;
+    if (!customer || !host || !/^[A-Za-z]$/.test(vol)) return;
     const ok = action === "enable"
-      ? confirm(`Turn on BitLocker for drive ${vol.toUpperCase()}: on ${p.host}?\n\nThe drive is encrypted in the background (used space only) and the recovery key is saved here. A computer without a working TPM cannot encrypt its Windows drive this way.`)
+      ? confirm(`Turn on BitLocker for drive ${vol.toUpperCase()}: on ${host}?\n\nThe drive is encrypted in the background (used space only) and the recovery key is saved here. A computer without a working TPM cannot encrypt its Windows drive this way.`)
       : true;
     if (!ok) return;
-    const j = await call("/api/bitlocker/requests", { customer: p.customer, host: p.host, volume: vol, action });
+    const j = await call("/api/bitlocker/requests", { customer, host, volume: vol, action });
     if (j) { setMsg({ kind: "info", text: "Requested. The computer is contacted within a minute." }); router.refresh(); }
   }
 
@@ -69,13 +73,25 @@ export default function EncryptionPanel(p: { customer: string | null; host: stri
     <>
       {msg && <div className={`banner ${msg.kind}`}>{msg.text}</div>}
 
-      {p.customer && p.host && (
+      {(p.customers.length > 0) && (
         <div className="card">
+          {!p.host && (
+            <div className="row" style={{ marginBottom: 12, gap: 12, flexWrap: "wrap" }}>
+              <label>Company{" "}
+                <select value={pickCust} onChange={(e) => setPickCust(e.target.value)}>
+                  {p.customers.map((c) => <option key={c.slug} value={c.slug}>{c.name}</option>)}
+                </select>
+              </label>
+              <label>Computer name{" "}
+                <input value={pickHost} onChange={(e) => setPickHost(e.target.value)} placeholder="e.g. DESKTOP-UJPN596" />
+              </label>
+            </div>
+          )}
           <strong>Drive</strong>{" "}
           <input value={vol} onChange={(e) => setVol(e.target.value.replace(/[^A-Za-z]/g, "").slice(0, 1).toUpperCase())} size={2} aria-label="Drive letter" style={{ width: 40, textAlign: "center" }} /> :
           <div className="row" style={{ marginTop: 12, gap: 8, flexWrap: "wrap" }}>
-            <button className="primary" disabled={busy || !vol} onClick={() => request("enable")}>Turn on BitLocker</button>
-            <button disabled={busy || !vol} onClick={() => request("escrow")}>Save the recovery key</button>
+            <button className="primary" disabled={busy || !vol || !host} onClick={() => request("enable")}>Turn on BitLocker</button>
+            <button disabled={busy || !vol || !host} onClick={() => request("escrow")}>Save the recovery key</button>
           </div>
           <p className="muted small" style={{ marginBottom: 0 }}>
             &ldquo;Turn on&rdquo; encrypts the drive and saves its recovery key. &ldquo;Save the recovery key&rdquo; is for a drive that is already encrypted: it reads the key from the computer (adding one if the drive has none) and stores it here.
