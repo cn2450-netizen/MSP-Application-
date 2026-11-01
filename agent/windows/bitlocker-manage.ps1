@@ -18,6 +18,10 @@ function Result([string] $state, [string] $text) {
     "MSP-BL-RESULT|$state|$text"
 }
 
+function Has-Protector([string] $mp, [string] $type) {
+    @((Get-BitLockerVolume -MountPoint $mp).KeyProtector | Where-Object { "$($_.KeyProtectorType)" -eq $type }).Count -gt 0
+}
+
 function Recovery-Protectors($mp) {
     @((Get-BitLockerVolume -MountPoint $mp).KeyProtector | Where-Object { "$($_.KeyProtectorType)" -eq 'RecoveryPassword' })
 }
@@ -57,14 +61,27 @@ try {
                 if (-not ($tpm.TpmPresent -and $tpm.TpmReady)) {
                     Result 'error' 'this computer has no ready TPM, so BitLocker cannot protect the Windows drive without a startup key or password: not changed'; return
                 }
-                # Policy often requires a recovery password to exist BEFORE encryption starts, so add it first.
-                if ((Recovery-Protectors $mp).Count -eq 0) {
+                # Add only the protectors that are missing (an earlier attempt may have left one behind): policy often
+                # requires the recovery password to exist BEFORE encryption starts. Then start encryption with manage-bde,
+                # which uses the protectors that are already there instead of trying to add more.
+                if (-not (Has-Protector $mp 'RecoveryPassword')) {
                     $step = 'adding the recovery password'
                     Add-BitLockerKeyProtector -MountPoint $mp -RecoveryPasswordProtector | Out-Null
                 }
-                $step = 'enabling BitLocker with the TPM'
+                if (-not (Has-Protector $mp 'Tpm')) {
+                    $step = 'adding the TPM protector'
+                    Add-BitLockerKeyProtector -MountPoint $mp -TpmProtector | Out-Null
+                }
+                $step = 'starting encryption'
                 $ep = Enable-Params $mp $true
-                Enable-BitLocker @ep -TpmProtector -SkipHardwareTest | Out-Null
+                $bde = @('-on', $mp, '-SkipHardwareTest')
+                if ($ep.ContainsKey('UsedSpaceOnly')) { $bde += '-UsedSpaceOnly' }
+                if ($ep.ContainsKey('EncryptionMethod')) { $bde += @('-EncryptionMethod', 'xts_aes256') }
+                $ErrorActionPreference = 'Continue'      # Windows PowerShell 5.1 turns a native command's stderr into a fatal error otherwise
+                $bdeOut = (& manage-bde.exe @bde 2>&1 | Out-String)
+                $bdeCode = $LASTEXITCODE
+                $ErrorActionPreference = 'Stop'
+                if ($bdeCode -ne 0) { throw ("manage-bde failed (" + $bdeCode + "): " + (($bdeOut -replace '\s+', ' ').Trim())) }
             }
             else {
                 $step = 'enabling BitLocker with a recovery password'
