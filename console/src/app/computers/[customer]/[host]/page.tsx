@@ -6,6 +6,7 @@ import { getView } from "@/lib/view";
 import { ago, bytes, when } from "@/lib/format";
 import { loadFleet } from "@/lib/fleet";
 import { RANGES, loadPerformance, rangeKey } from "@/lib/metrics";
+import { loadPatches } from "@/lib/patches";
 import LineChart from "../../../LineChart";
 import Gauge from "../../../Gauge";
 
@@ -26,7 +27,7 @@ export default async function ComputerPage({ params, searchParams }: { params: P
   if (!r) notFound();
   const staff = isStaffFor(scope, customer);
   const classic = env.legacyUrl;
-  const perf = await loadPerformance(customer, host, range);
+  const [perf, patches] = await Promise.all([loadPerformance(customer, host, range), loadPatches(customer, host)]);
   const to = Date.now(), from = to - RANGES[range].ms, gapMs = RANGES[range].ms / 40;
 
   return (
@@ -62,6 +63,37 @@ export default async function ComputerPage({ params, searchParams }: { params: P
             ) : <span className="muted">This computer is not set up for backup.</span>}
           </div>
         </div>
+      </div>
+      <h2 style={{ margin: "18px 0 10px" }}>Patching</h2>
+      <div className="panel">
+        <h3>Compliance</h3>
+        <div className="body">
+          <p><span className={`pill ${patches.compliance.key}`}>{patches.compliance.label}</span> <span className="muted">{patches.compliance.detail}</span></p>
+          {patches.lastInstall && <div className="kv"><span className="muted">Last update installed</span><span>{patches.lastInstall}</span></div>}
+          <div className="kv"><span className="muted">Recent failures not yet fixed</span><span>{patches.failed}</span></div>
+        </div>
+      </div>
+      <div className="panel">
+        <h3>Update history (last 90 days)</h3>
+        <div className="scroll">
+          {patches.rows.length === 0 ? <div className="body muted">{patches.error ?? "No update history reported yet."}</div> : (
+            <table>
+              <thead><tr><th>Date</th><th>Update</th><th>KB</th><th>What</th><th>Result</th></tr></thead>
+              <tbody>
+                {patches.rows.slice(0, 50).map((p, i) => (
+                  <tr key={i}>
+                    <td className="muted">{p.date}</td>
+                    <td>{p.title}</td>
+                    <td className="muted small">{p.kb || "–"}</td>
+                    <td>{p.operation}</td>
+                    <td><span className={`pill ${p.result === "Succeeded" ? "ok" : p.result === "Failed" || p.result === "Aborted" ? "bad" : p.result === "SucceededWithErrors" ? "warn" : ""}`}>{p.result === "SucceededWithErrors" ? "Done with errors" : p.result}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+        {patches.rows.length > 50 && <p className="muted small" style={{ margin: "8px 16px" }}>Showing the newest 50 of {patches.rows.length}.</p>}
       </div>
       <div className="row perf-head">
         <h2 style={{ margin: 0 }}>Performance</h2>
