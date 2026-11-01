@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Gauge from "../Gauge";
 
 type Key = { id: string; customer_slug: string; company: string; host: string; volume: string; protector_id: string; collected_at: string };
 type Req = {
@@ -11,7 +12,7 @@ type Req = {
 const when = (s: string) => new Date(s).toLocaleString();
 const STATUS: Record<Req["status"], string> = { pending: "Waiting", running: "Working", done: "Done", failed: "Failed", cancelled: "Cancelled" };
 
-export default function EncryptionPanel(p: { customer: string | null; filter: string | null; host: string | null; volume: string | null; companyName: string | null; customers: { slug: string; name: string }[]; defaultCustomer: string; keys: Key[]; requests: Req[] }) {
+export default function EncryptionPanel(p: { stats: { connected: number; protected: number; failed: number }; customer: string | null; filter: string | null; host: string | null; volume: string | null; companyName: string | null; customers: { slug: string; name: string }[]; defaultCustomer: string; keys: Key[]; requests: Req[] }) {
   const router = useRouter();
   const [vol, setVol] = useState(p.volume ?? "");
   const [pickCust, setPickCust] = useState(p.defaultCustomer || p.customers[0]?.slug || "");
@@ -73,10 +74,11 @@ export default function EncryptionPanel(p: { customer: string | null; filter: st
     <>
       {msg && <div className={`banner ${msg.kind}`}>{msg.text}</div>}
 
+      <div className="enc-top">
       {(p.customers.length > 0) && (
-        <div className="card">
+        <div className="card enc-form">
           {!p.host && (
-            <div className="row" style={{ marginBottom: 12, gap: 12, flexWrap: "wrap" }}>
+            <div className="stack" style={{ marginBottom: 12 }}>
               <label>Company{" "}
                 <select value={pickCust} onChange={(e) => setPickCust(e.target.value)}>
                   {p.customers.map((c) => <option key={c.slug} value={c.slug}>{c.name}</option>)}
@@ -98,6 +100,19 @@ export default function EncryptionPanel(p: { customer: string | null; filter: st
           </p>
         </div>
       )}
+      <div className="panel enc-gauge">
+        <h3>Protected by BitLocker</h3>
+        <div className="body">
+          <Gauge value={p.stats.protected} total={p.stats.connected} label="Computers protected by BitLocker" caption={`${p.stats.protected} of ${p.stats.connected} computers`} />
+          <ul className="legend">
+            <li><i style={{ background: "var(--brand)" }} />Connected: <strong>{p.stats.connected}</strong></li>
+            <li><i style={{ background: "var(--ok)" }} />Protected: <strong>{p.stats.protected}</strong></li>
+            <li><i style={{ background: "var(--bad)" }} />Not protected: <strong>{p.stats.connected - p.stats.protected}</strong></li>
+          </ul>
+          {p.stats.failed > 0 && <p className="muted small">Monitoring data could not be read for {p.stats.failed} {p.stats.failed === 1 ? "company" : "companies"}.</p>}
+        </div>
+      </div>
+      </div>
 
       <div className="panel">
         <h3>Saved recovery keys</h3>

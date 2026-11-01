@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getScope } from "@/lib/session";
 import { isStaffFor } from "@/lib/authz";
-import { customerSlug, hostName, listKeys, listRequests, volumeLetter } from "@/lib/bitlocker";
+import { customerSlug, driveState, hostName, listComputers, listKeys, listRequests, volumeLetter } from "@/lib/bitlocker";
 import { getView } from "@/lib/view";
 import EncryptionPanel from "./EncryptionPanel";
 
@@ -36,6 +36,13 @@ export default async function Encryption({ searchParams }: { searchParams: Promi
   const keys = (await listKeys(scope, filter, host)).filter((k) => staff(k.customer_slug));
   const requests = (await listRequests(scope, filter, host)).filter((r) => staff(r.customer_slug));
 
+  // Computers connected (reporting to monitoring) against computers whose every drive is encrypted and protected.
+  const staffCustomers = view.customers.filter((x) => staff(x.slug) && (!filter || x.slug === filter));
+  const { computers, failed } = await listComputers(scope, staffCustomers);
+  const scoped = computers.filter((c) => (!host || c.host === host) && (!customer || c.customer_slug === customer));
+  const protectedN = scoped.filter((c) => c.drives.length > 0 && c.drives.every((d) => driveState(d).key === "ok")).length;
+  const stats = { connected: scoped.length, protected: protectedN, failed: failed.length };
+
   return (
     <>
       <h1>Encryption</h1>
@@ -45,7 +52,7 @@ export default async function Encryption({ searchParams }: { searchParams: Promi
           : filter ? `BitLocker recovery keys and requests for ${names.get(filter) ?? filter}.` : "BitLocker recovery keys saved by the platform, and requests to turn BitLocker on."}
       </p>
       <EncryptionPanel
-        customer={customer} filter={filter} host={host} volume={volume}
+        customer={customer} filter={filter} host={host} volume={volume} stats={stats}
         customers={view.customers.filter((x) => staff(x.slug)).map((x) => ({ slug: x.slug, name: x.name }))}
         defaultCustomer={customer ?? view.customer}
         companyName={customer ? names.get(customer) ?? customer : null}
