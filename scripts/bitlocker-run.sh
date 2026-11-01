@@ -3,7 +3,7 @@
 #   scripts/bitlocker-run.sh <customer> <computer> <drive-letter> enable|escrow
 # Used by scripts/bitlocker-executor.sh for portal requests; also fine by hand. Needs a MeshCentral login token
 # (scripts/mesh-token.sh set) and the portal database. Prints a one-line outcome; recovery keys are never printed or logged.
-# Exit: 0 ok, 1 the PC reported a problem or could not be reached.
+# Exit: 0 ok, 1 the PC reported a problem, 3 not possible right now (computer off / no Mesh token: the worker retries later).
 set -uo pipefail
 cd "$(dirname "$0")/.."
 set -a; source .env; set +a
@@ -22,7 +22,7 @@ keyfile=secrets/bitlocker_escrow_key
 pass="$(cat "$keyfile")"
 [[ "$pass" =~ ^[0-9a-f]+$ ]] || { echo "unexpected characters in $keyfile"; exit 1; }
 
-mesh_login 2>/dev/null || { echo "MeshCentral login token missing or expired: create one (My Account -> Create login token) and run scripts/mesh-token.sh set, then try again"; exit 1; }
+mesh_login 2>/dev/null || { echo "MeshCentral login token missing or expired: create one (My Account -> Create login token) and run scripts/mesh-token.sh set, then try again"; exit 3; }
 
 # the device: online, in any of this customer's device groups ("<customer> / <site>"), matched by computer name
 id=""
@@ -31,7 +31,7 @@ while IFS= read -r g; do
   id="$(mc ListDevices --group "$g" --json | jq -r --arg n "$hostl" '[.[]|select(((.conn // 0) % 2) == 1 and ((.name|ascii_downcase)==$n))]|.[0]._id // empty' 2>/dev/null)"
   [[ -n "$id" ]] && break
 done < <(mc ListDeviceGroups --json | jq -r --arg p "${cust} / " '.[]|select(.name|startswith($p))|.name')
-[[ -n "$id" ]] || { echo "${host} is not online in MeshCentral (device groups '${cust} / ...'): it must be switched on and connected"; exit 1; }
+[[ -n "$id" ]] || { echo "${host} is not online in MeshCentral (device groups '${cust} / ...'): it must be switched on and connected"; exit 3; }
 
 CT=/tmp/msp-bitlocker.ps1
 REMOTE_DIR='C:\Windows\Temp\'

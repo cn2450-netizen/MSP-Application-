@@ -71,6 +71,7 @@ export async function moveRequest(id: string, from: string[], to: string) {
   const r = await q(
     `UPDATE bitlocker_request SET status = $3,
             message = CASE WHEN $3 = 'pending' THEN NULL ELSE message END,
+            last_try = CASE WHEN $3 = 'pending' THEN NULL ELSE last_try END,
             finished_at = CASE WHEN $3 = 'pending' THEN NULL ELSE now() END
       WHERE id = $1 AND status = ANY($2) RETURNING id`, [id, from, to]);
   return r.length > 0;

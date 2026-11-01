@@ -104,6 +104,7 @@ echo
 echo "First site: main"
 scripts/add-site.sh "$slug" main "Main site"
 scripts/update-customer-hub.sh || echo "  (the customer picker was not updated; run scripts/update-customer-hub.sh)"
+scripts/portal-sync.sh >/dev/null || echo "  (the portal company list was not updated; run scripts/portal-sync.sh)"
 
 trap - ERR
 echo

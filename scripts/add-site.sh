@@ -85,5 +85,6 @@ else
   echo "MeshCentral: no login token stored, so no device group yet. When ready: create a token (My Account -> Create login token),"
   echo "  scripts/mesh-token.sh set, then scripts/mesh-site.sh ${cust} ${site}"
 fi
+scripts/portal-sync.sh >/dev/null || echo "WARNING: the portal site list was not updated; run scripts/portal-sync.sh" >&2
 echo
 echo "Site '${site}' added to '${cust}'. Credentials: ${cred} (mode 600)"
