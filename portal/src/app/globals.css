@@ -94,3 +94,5 @@ nav.side a.on { background: var(--hover); color: var(--text); box-shadow: inset 
   .shell aside .brand { padding: 4px 6px; }
   nav.side { flex-direction: row; flex-wrap: wrap; }
 }
+.drive { display: inline-flex; align-items: center; gap: 6px; margin: 2px 14px 2px 0; white-space: nowrap; }
+.drive .bar { width: 90px; height: 8px; } .drive .bar > div.ok { background: var(--ok); } .drive .bar > div.warn { background: var(--warn); } .drive .bar > div.bad { background: var(--bad); }

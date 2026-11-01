@@ -88,9 +88,14 @@ export default async function Computers({ searchParams }: { searchParams: Promis
                       {multi && <td className="muted">{r.customerName}</td>}
                       <td>
                         {r.drives.length === 0 ? <span className="muted">No data</span> : r.drives.map((d) => (
-                          <span key={d.volume} style={{ marginRight: 10, whiteSpace: "nowrap" }}>
-                            {d.volume}: <span className={`pill ${d.state.key}`}>{d.state.label}</span>
-                            {d.key_saved && <span className="muted small" title="Recovery key saved in the portal"> key saved</span>}
+                          <span key={d.volume} className="drive" title={`${d.label}: ${d.status}${d.key_saved ? ", recovery key saved" : ""}`}>
+                            {d.volume}:
+                            <span className="bar" role="progressbar" aria-valuenow={Math.round(d.percent)} aria-valuemin={0} aria-valuemax={100}>
+                              <div className={d.state.key} style={{ width: `${Math.max(0, Math.min(100, d.percent))}%` }} />
+                            </span>
+                            <span className="small">{Math.round(d.percent)}%</span>
+                            <span className={`pill ${d.state.key}`}>{d.state.label}</span>
+                            {d.key_saved && <span className="muted small"> key saved</span>}
                           </span>
                         ))}
                       </td>

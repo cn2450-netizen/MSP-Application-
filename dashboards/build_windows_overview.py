@@ -15,6 +15,9 @@ LOKI = {"type": "loki", "uid": "loki"}
 
 GREEN_AMBER_RED = {"mode": "absolute", "steps": [
     {"color": "green", "value": None}, {"color": "orange", "value": 80}, {"color": "red", "value": 90}]}
+# progress toward a goal (BitLocker encryption): high is GOOD, so the colours run the other way
+PROGRESS_STEPS = {"mode": "absolute", "steps": [
+    {"color": "red", "value": None}, {"color": "orange", "value": 1}, {"color": "green", "value": 100}]}
 CPU_STEPS = {"mode": "absolute", "steps": [
     {"color": "green", "value": None}, {"color": "orange", "value": 70}, {"color": "red", "value": 90}]}
 
@@ -38,11 +41,11 @@ def gauge(pid, title, x, y, w, h, query, display_name, steps=GREEN_AMBER_RED):
     return p
 
 
-def gauge_cell():
-    """Table-cell gauge, 0-100 %."""
+def gauge_cell(steps=None):
+    """Table-cell gauge, 0-100 %. `steps` overrides the zones (usage-style green -> red by default)."""
     return [{"id": "custom.cellOptions", "value": {"type": "gauge", "mode": "gradient"}},
             {"id": "min", "value": 0}, {"id": "max", "value": 100}, {"id": "unit", "value": "percent"},
-            {"id": "thresholds", "value": GREEN_AMBER_RED}]
+            {"id": "thresholds", "value": steps or GREEN_AMBER_RED}]
 
 
 # ---- queries ---------------------------------------------------------------------------------------------
@@ -147,7 +150,7 @@ bl["fieldConfig"]["overrides"] = [
             "0": {"text": "OFF", "color": "red", "index": 0},
             "1": {"text": "On", "color": "green", "index": 1}}}]},
         {"id": "custom.cellOptions", "value": {"type": "color-text"}}]},
-    {"matcher": {"id": "byName", "options": "encryption_percentage"}, "properties": gauge_cell()},
+    {"matcher": {"id": "byName", "options": "encryption_percentage"}, "properties": gauge_cell(PROGRESS_STEPS)},
     # staff: click a drive to turn BitLocker on or to get its recovery key. __PORTAL_URL__ and __CUSTOMER__ are filled
     # in per customer by scripts/update-dashboards.sh and add-customer.sh.
     {"matcher": {"id": "byName", "options": "volume"}, "properties": [
