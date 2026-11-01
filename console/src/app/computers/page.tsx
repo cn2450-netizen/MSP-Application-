@@ -4,6 +4,7 @@ import { getView } from "@/lib/view";
 import { ago, bytes, when } from "@/lib/format";
 import { backupNeedsLook, fullyEncrypted, keyMissing, loadFleet, notFullyEncrypted } from "@/lib/fleet";
 import Filters from "../Filters";
+import Pager, { PAGE_SIZE, pageOf } from "../Pager";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +19,7 @@ const STATUS_OPTIONS = [
   { value: "attention", label: "Backup needs a look" },
 ];
 
-export default async function Computers({ searchParams }: { searchParams: Promise<{ enc?: string; status?: string }> }) {
+export default async function Computers({ searchParams }: { searchParams: Promise<{ enc?: string; status?: string; page?: string }> }) {
   const scope = await getScope();
   if (!scope) redirect("/login");
   const sp = await searchParams;
@@ -29,6 +30,8 @@ export default async function Computers({ searchParams }: { searchParams: Promis
     (!sp.enc || (sp.enc === "on" ? fullyEncrypted(r) : sp.enc === "off" ? notFullyEncrypted(r) : keyMissing(r))) &&
     (!sp.status || (sp.status === "online" ? r.online : sp.status === "offline" ? !r.online : backupNeedsLook(r))));
   const multi = !view.customer && (scope.admin || view.customers.length > 1);
+  const page = pageOf(sp.page, shown.length);
+  const pageRows = shown.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
     <>
@@ -47,7 +50,7 @@ export default async function Computers({ searchParams }: { searchParams: Promis
             <table>
               <thead><tr><th>Computer</th>{multi && <th>Company</th>}<th>Encryption</th><th>Backup</th><th>Last good backup</th><th>Size</th><th>Last seen</th></tr></thead>
               <tbody>
-                {shown.map((r) => (
+                {pageRows.map((r) => (
                   <tr key={r.key}>
                     <td>
                       <span className={`dot ${r.online ? "ok" : "none"}`} title={r.online ? "Online" : "Not online"} />
@@ -76,6 +79,7 @@ export default async function Computers({ searchParams }: { searchParams: Promis
             </table>
           )}
         </div>
+        <Pager total={shown.length} page={page} path="/computers" params={{ status: sp.status, enc: sp.enc }} />
       </div>
     </>
   );

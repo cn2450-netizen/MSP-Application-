@@ -109,3 +109,11 @@ nav.side a .ext { margin-left: auto; opacity: .55; font-size: 12px; }
 .kv > .muted:first-child { min-width: 130px; }
 .kv .bar { min-width: 90px; }
 .kv .bar > div.ok { background: var(--ok); } .kv .bar > div.warn { background: var(--warn); } .kv .bar > div.bad { background: var(--bad); }
+
+/* ---- pager: count on the left, page buttons on the right ---- */
+.pager { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 10px 14px; border-top: 1px solid var(--line); }
+.pager .pages { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+.pager .btn { padding: 4px 11px; }
+.pager .btn.on { background: var(--brand); color: var(--brand-text); border-color: var(--brand); font-weight: 600; }
+.pager .btn.off { opacity: .45; cursor: default; }
+.pill + .pill { margin-left: 6px; }

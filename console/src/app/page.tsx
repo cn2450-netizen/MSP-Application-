@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getScope } from "@/lib/session";
 import { getView } from "@/lib/view";
 import { ago } from "@/lib/format";
+import Pager, { PAGE_SIZE, pageOf } from "./Pager";
 import { backupNeedsLook, fullyEncrypted, keyMissing, loadFleet, notFullyEncrypted, offlineLong, type FleetRow } from "@/lib/fleet";
 
 export const dynamic = "force-dynamic";
@@ -19,15 +20,20 @@ function issuesFor(r: FleetRow): Issue[] {
   return out;
 }
 
-export default async function Overview() {
+export default async function Overview({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
   const scope = await getScope();
   if (!scope) redirect("/login");
+  const sp = await searchParams;
   const view = await getView(scope);
   const { rows, failed } = await loadFleet(scope, view);
   const title = view.customer ? view.customers.find((c) => c.slug === view.customer)?.name ?? "Overview" : "Overview";
 
-  const issues = rows.flatMap(issuesFor).sort((a, b) => (a.tone === b.tone ? 0 : a.tone === "bad" ? -1 : 1));
-  const withIssue = new Set(issues.map((i) => i.row.key)).size;
+  // One line per computer (all of them), with each of its problems, worst first.
+  const byComputer = rows.map((r) => ({ row: r, list: issuesFor(r) }))
+    .sort((a, b) => Number(b.list.some((i) => i.tone === "bad")) - Number(a.list.some((i) => i.tone === "bad")) || b.list.length - a.list.length || a.row.name.localeCompare(b.row.name));
+  const withIssue = byComputer.filter((x) => x.list.length > 0).length;
+  const page = pageOf(sp.page, byComputer.length);
+  const pageRows = byComputer.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const multi = !view.customer && (scope.admin || view.customers.length > 1);
 
   return (
@@ -45,24 +51,25 @@ export default async function Overview() {
       </div>
 
       <div className="panel">
-        <h3>Needs attention</h3>
+        <h3>Computers ({byComputer.length})</h3>
         <div className="scroll">
-          {issues.length === 0 ? <div className="body muted">{rows.length === 0 ? "No computers have reported yet." : "Nothing needs attention."}</div> : (
+          {byComputer.length === 0 ? <div className="body muted">No computers have reported yet.</div> : (
             <table>
-              <thead><tr><th>Computer</th>{multi && <th>Company</th>}<th>Problem</th><th>Last seen</th></tr></thead>
+              <thead><tr><th>Computer</th>{multi && <th>Company</th>}<th>Status</th><th>Last seen</th></tr></thead>
               <tbody>
-                {issues.map((i, n) => (
-                  <tr key={`${i.row.key}-${n}`}>
-                    <td><a href={`/computers/${i.row.slug}/${i.row.host}`}>{i.row.name}</a></td>
-                    {multi && <td className="muted">{i.row.customerName}</td>}
-                    <td><span className={`pill ${i.tone}`}>{i.what}</span></td>
-                    <td className="muted">{ago(i.row.lastSeen)}</td>
+                {pageRows.map(({ row, list }) => (
+                  <tr key={row.key}>
+                    <td><a href={`/computers/${row.slug}/${row.host}`}>{row.name}</a></td>
+                    {multi && <td className="muted">{row.customerName}</td>}
+                    <td>{list.length === 0 ? <span className="pill ok">All good</span> : list.map((i) => <span key={i.what} className={`pill ${i.tone}`}>{i.what}</span>)}</td>
+                    <td className="muted">{ago(row.lastSeen)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           )}
         </div>
+        <Pager total={byComputer.length} page={page} path="/" />
       </div>
     </>
   );
