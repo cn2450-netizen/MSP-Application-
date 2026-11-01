@@ -502,9 +502,28 @@
                 }
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "volume"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "BitLocker: turn on / recovery key (support staff)",
+                    "targetBlank": true,
+                    "url": "__PORTAL_URL__/encryption?customer=__CUSTOMER__&host=${__data.fields.host}&volume=${__data.fields.volume}"
+                  }
+                ]
+              }
+            ]
           }
         ]
-      }
+      },
+      "description": "Support staff: click a drive name to turn BitLocker on or to get its recovery key."
     },
     {
       "id": 6,

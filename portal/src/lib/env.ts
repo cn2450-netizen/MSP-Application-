@@ -18,6 +18,7 @@ export const env = {
   get authHost() { return plain("AUTH_HOST"); },
   get dbHost() { return process.env.PORTAL_DB_HOST || "postgres"; },
   get dbPassword() { return secret("PORTAL_DB_PASSWORD"); },
+  get bitlockerKey() { return secret("BITLOCKER_KEY"); },
   get oidcSecret() { return secret("PORTAL_OIDC_SECRET"); },
   // Off unless the operator turns it on: a lab with a single technician cannot have a second person approve.
   get allowSelfApprove() { return process.env.PORTAL_ALLOW_SELF_APPROVE === "1"; },

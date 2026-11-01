@@ -33,6 +33,7 @@ gen meshcentral_oidc_secret
 gen meshcentral_session_key 48
 gen portal_db_password
 gen portal_oidc_secret
+gen bitlocker_escrow_key
 
 [[ -e .env ]] || { cp .env.example .env; echo "Created .env — edit hostnames before 'docker compose up'."; }
 chmod 600 .env

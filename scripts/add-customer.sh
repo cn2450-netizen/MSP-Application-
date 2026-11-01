@@ -81,7 +81,7 @@ gf -X POST "$GF_URL/api/datasources" -H "X-Grafana-Org-Id: $org_id" -d "$(jq -n 
 
 echo "[3/5] Starter dashboard"
 gf -X POST "$GF_URL/api/dashboards/db" -H "X-Grafana-Org-Id: $org_id" \
-  -d "$(jq -n --slurpfile d dashboards/windows-overview.json '{dashboard:$d[0],overwrite:true}')" >/dev/null
+  -d "$(sed -e "s|__CUSTOMER__|${slug}|g" -e "s|__PORTAL_URL__|https://${PORTAL_HOST}|g" dashboards/windows-overview.json | jq '{dashboard:.,overwrite:true}')" >/dev/null
 
 echo "[4/5] authentik groups + Grafana access"
 groups_made=1

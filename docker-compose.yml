@@ -38,6 +38,8 @@ secrets:
     file: ./secrets/portal_db_password
   portal_oidc_secret:
     file: ./secrets/portal_oidc_secret
+  bitlocker_escrow_key:
+    file: ./secrets/bitlocker_escrow_key
 
 services:
   postgres:
@@ -257,8 +259,9 @@ services:
       PORTAL_ALLOW_SELF_APPROVE: ${PORTAL_ALLOW_SELF_APPROVE:-0}
       PORTAL_DB_PASSWORD_FILE: /run/secrets/portal_db_password
       PORTAL_OIDC_SECRET_FILE: /run/secrets/portal_oidc_secret
+      BITLOCKER_KEY_FILE: /run/secrets/bitlocker_escrow_key
       NODE_ENV: production
-    secrets: [portal_db_password, portal_oidc_secret]
+    secrets: [portal_db_password, portal_oidc_secret, bitlocker_escrow_key]
     ports:
       - "${BIND_ADDR}:${PORTAL_PORT}:3000"
     networks: [edge, backend]

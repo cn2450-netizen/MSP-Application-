@@ -148,7 +148,13 @@ bl["fieldConfig"]["overrides"] = [
             "1": {"text": "On", "color": "green", "index": 1}}}]},
         {"id": "custom.cellOptions", "value": {"type": "color-text"}}]},
     {"matcher": {"id": "byName", "options": "encryption_percentage"}, "properties": gauge_cell()},
+    # staff: click a drive to turn BitLocker on or to get its recovery key. __PORTAL_URL__ and __CUSTOMER__ are filled
+    # in per customer by scripts/update-dashboards.sh and add-customer.sh.
+    {"matcher": {"id": "byName", "options": "volume"}, "properties": [
+        {"id": "links", "value": [{"title": "BitLocker: turn on / recovery key (support staff)", "targetBlank": True,
+            "url": "__PORTAL_URL__/encryption?customer=__CUSTOMER__&host=${__data.fields.host}&volume=${__data.fields.volume}"}]}]},
 ]
+bl["description"] = "Support staff: click a drive name to turn BitLocker on or to get its recovery key."
 panels.append(bl)
 
 panels.append(base(6, "Auto-start services NOT running", "table", 0, 15, 12, 9, [flux(SERVICES)]))

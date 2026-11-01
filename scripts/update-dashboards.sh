@@ -13,6 +13,6 @@ while IFS=$'\t' read -r slug _name _created; do
   org_id="$(curl -fsS -u "$GF_AUTH" "$GF_URL/api/orgs/name/${slug}" | jq -r '.id')"
   curl -fsS -u "$GF_AUTH" -H 'Content-Type: application/json' -H "X-Grafana-Org-Id: ${org_id}" \
     -X POST "$GF_URL/api/dashboards/db" \
-    -d "$(jq -n --slurpfile d dashboards/windows-overview.json '{dashboard:$d[0],overwrite:true}')" >/dev/null
+    -d "$(sed -e "s|__CUSTOMER__|${slug}|g" -e "s|__PORTAL_URL__|https://${PORTAL_HOST}|g" dashboards/windows-overview.json | jq '{dashboard:.,overwrite:true}')" >/dev/null
   echo "  updated ${slug} (org ${org_id})"
 done < generated/customers.tsv

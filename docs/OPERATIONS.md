@@ -67,8 +67,17 @@ Scripts that touch MeshCentral need a short-lived login token because there is n
 
 - **LUKS key** for the data LUN: vault plus a printed copy. Without it the platform data is unrecoverable.
 - **`./secrets`**: back up offline. It is excluded from git.
+- **`secrets/bitlocker_escrow_key`**: encrypts the saved BitLocker recovery keys in the portal database. Keep a copy in your vault: without it the saved keys cannot be read (a rebuild from the platform backup restores it with `./secrets`).
 - **Each computer's repository password**: in its credentials file and in your vault. Without it its backups cannot be read.
 - Admin sudo requires a password (passwordless sudo removed); scripts that use `sudo` need an interactive session.
+
+## BitLocker (turn on, recovery keys)
+
+On the Grafana dashboard, click a drive in the BitLocker table: it opens the portal's **Encryption** page for that computer and drive (support staff only). **Turn on BitLocker** encrypts the drive (used space only, XtsAes256; the Windows drive needs a ready TPM) and saves the recovery key; **Save the recovery key** reads it from an already-encrypted drive. **Show key** asks for a reason and logs who, when and why (`bitlocker.key.reveal` in the audit table); the key is shown for 60 seconds.
+
+How it works: the portal records a request; `msp-bitlocker.timer` (`sudo scripts/install-bitlocker-executor.sh`, once) runs `scripts/bitlocker-executor.sh` every minute, which pushes `agent/windows/bitlocker-manage.ps1` to the PC through MeshCentral as SYSTEM, deletes it afterwards and stores the key encrypted (pgcrypto) with `secrets/bitlocker_escrow_key`. Like computer replacement it needs a MeshCentral login token (`scripts/mesh-token.sh set`); without one the request fails with a message and can be retried. By hand: `scripts/bitlocker-run.sh <customer> <computer> <drive> enable|escrow`. After editing the dashboard run `python dashboards/build_windows_overview.py && scripts/update-dashboards.sh`.
+
+Servers without the BitLocker feature report that (installing it restarts the server, so it is not done automatically). Existing deployments: run `scripts/init-secrets.sh` (creates the new secret), then `docker compose up -d portal`.
 
 ## Host firewall
 
