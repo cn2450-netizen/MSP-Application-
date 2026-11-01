@@ -98,13 +98,12 @@ nav.side a.on { background: var(--hover); color: var(--text); box-shadow: inset 
 .drive .bar { width: 90px; height: 8px; } .drive .bar > div.ok { background: var(--ok); } .drive .bar > div.warn { background: var(--warn); } .drive .bar > div.bad { background: var(--bad); }
 
 /* ---- Encryption page: narrow request form on the left, protection gauge beside it ---- */
-.enc-top { display: flex; gap: 12px; align-items: stretch; flex-wrap: wrap; margin-bottom: 12px; }
-.enc-top .enc-form { flex: 0 1 340px; min-width: 260px; margin-bottom: 0; }
-.enc-top .enc-gauge { flex: 1 1 340px; min-width: 260px; margin-bottom: 0; display: flex; flex-direction: column; }
-.enc-top .enc-gauge .body { flex: 1; display: flex; flex-direction: column; justify-content: center; }
-.enc-top .enc-gauge .gauge svg { width: min(100%, 360px); height: auto; }
+.enc-top { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; margin-bottom: 12px; }
+.enc-top .enc-form { flex: 1 1 340px; min-width: 260px; margin-bottom: 0; }
+.enc-top .enc-gauge { flex: 0 0 340px; margin-bottom: 0; }
 .enc-form .stack { display: flex; flex-direction: column; gap: 10px; }
 .enc-form .stack label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
 .enc-form .stack input, .enc-form .stack select { width: 100%; }
+@media (max-width: 760px) { .enc-top .enc-gauge { flex: 1 1 100%; } }
 .gauge { display: flex; justify-content: center; }
 .enc-gauge .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: center; margin-top: 4px; }
