@@ -3,7 +3,7 @@
 # It prints machine-readable lines the host worker parses; nothing else is written anywhere:
 #   MSP-BL-KEY|<drive letter>|<protector id>|<48-digit recovery password>
 #   MSP-BL-RESULT|ok|<short text>     or     MSP-BL-RESULT|error|<short text>
-# Enable: used-space-only XtsAes256. The Windows drive needs a ready TPM (TPM protector, no restart needed:
+# Enable: used-space-only XtsAes256 unless the PC's own BitLocker policy says otherwise (full-disk, or a named method). The Windows drive needs a ready TPM (TPM protector, no restart needed:
 # -SkipHardwareTest); other drives get a recovery password and auto-unlock. Never decrypts or removes anything.
 # ASCII only: Windows PowerShell 5.1 mis-reads UTF-8 scripts that have no byte-order mark.
 param(
@@ -20,6 +20,20 @@ function Result([string] $state, [string] $text) {
 
 function Recovery-Protectors($mp) {
     @((Get-BitLockerVolume -MountPoint $mp).KeyProtector | Where-Object { "$($_.KeyProtectorType)" -eq 'RecoveryPassword' })
+}
+
+# Follow the machine's BitLocker policy (Group Policy / Intune) where it has one: a policy that requires full-disk
+# encryption refuses "used space only", and one that names an encryption method refuses ours (1 = full, 2 = used space).
+function Policy-Value([string] $name) {
+    try { return (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\FVE' -Name $name -ErrorAction Stop).$name } catch { return $null }
+}
+function Enable-Params([string] $mp, [bool] $isOs) {
+    $p = @{ MountPoint = $mp }
+    if ($isOs) { $type = Policy-Value 'OSEncryptionType'; $method = Policy-Value 'EncryptionMethodWithXtsOs' }
+    else       { $type = Policy-Value 'FDVEncryptionType'; $method = Policy-Value 'EncryptionMethodWithXtsFdv' }
+    if ($type -ne 1) { $p.UsedSpaceOnly = $true }
+    if ($null -eq $method -and $null -eq (Policy-Value 'EncryptionMethod')) { $p.EncryptionMethod = 'XtsAes256' }
+    return $p
 }
 
 $step = 'starting'
@@ -44,11 +58,13 @@ try {
                     Result 'error' 'this computer has no ready TPM, so BitLocker cannot protect the Windows drive without a startup key or password: not changed'; return
                 }
                 $step = 'enabling BitLocker with the TPM'
-                Enable-BitLocker -MountPoint $mp -EncryptionMethod XtsAes256 -UsedSpaceOnly -TpmProtector -SkipHardwareTest | Out-Null
+                $ep = Enable-Params $mp $true
+                Enable-BitLocker @ep -TpmProtector -SkipHardwareTest | Out-Null
             }
             else {
                 $step = 'enabling BitLocker with a recovery password'
-                Enable-BitLocker -MountPoint $mp -EncryptionMethod XtsAes256 -UsedSpaceOnly -RecoveryPasswordProtector | Out-Null
+                $ep = Enable-Params $mp $false
+                Enable-BitLocker @ep -RecoveryPasswordProtector | Out-Null
                 try { Enable-BitLockerAutoUnlock -MountPoint $mp | Out-Null }
                 catch { $note = ' The drive will not unlock by itself until the Windows drive is encrypted: run this again afterwards.' }
             }
