@@ -14,7 +14,9 @@ export const rangeKey = (v: string | undefined): RangeKey => (v && v in RANGES ?
 
 export type Point = { t: number; v: number };
 export type Series = { label: string; points: Point[] };
-export type Performance = { cpu: Series[]; memory: Series[]; disk: Series[]; error: string | null };
+export type Now = { cpu: number | null; memory: number | null; disk: { name: string; v: number }[] };
+export type Performance = { cpu: Series[]; memory: Series[]; disk: Series[]; now: Now; error: string | null };
+const NO_NOW: Now = { cpu: null, memory: null, disk: [] };
 
 const SLUG = /^[a-z0-9][a-z0-9-]{1,30}$/;
 const HOST = /^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$/;
@@ -32,7 +34,7 @@ function toSeries(rows: Record<string, string>[], byName: boolean): Series[] {
 }
 
 export async function loadPerformance(slug: string, host: string, range: RangeKey): Promise<Performance> {
-  if (!SLUG.test(slug) || !HOST.test(host)) return { cpu: [], memory: [], disk: [], error: "invalid computer" };
+  if (!SLUG.test(slug) || !HOST.test(host)) return { cpu: [], memory: [], disk: [], now: NO_NOW, error: "invalid computer" };
   const { start, every } = RANGES[range];
   const base = (filter: string) => `import "strings"
 from(bucket: "cust_${slug}") |> range(start: ${start})
@@ -47,8 +49,20 @@ from(bucket: "cust_${slug}") |> range(start: ${start})
       fluxRows(`${base('r._measurement == "volume" and r._field == "used_percent"')}
         ${win} |> keep(columns: ["_time", "_value", "name"]) |> group()`),
     ]);
-    return { cpu: toSeries(cpu, false), memory: toSeries(mem, false), disk: toSeries(disk, true), error: null };
+    // the gauges show the present, whatever range the history charts cover: the last few minutes only
+    const recent = (filter: string, tail: string) => fluxRows(`import "strings"
+from(bucket: "cust_${slug}") |> range(start: -15m)
+  |> filter(fn: (r) => ${filter} and strings.toLower(v: r.host) == "${host}")
+  ${tail}`);
+    const [nCpu, nMem, nDisk] = await Promise.all([
+      recent('r._measurement == "cpu" and r._field == "usage_idle" and r.cpu == "cpu-total"', '|> map(fn: (r) => ({r with _value: 100.0 - r._value})) |> mean() |> keep(columns: ["_value"]) |> group()'),
+      recent('r._measurement == "mem" and r._field == "used_percent"', '|> last() |> keep(columns: ["_value"]) |> group()'),
+      recent('r._measurement == "volume" and r._field == "used_percent"', '|> last() |> keep(columns: ["_value", "name"]) |> group()'),
+    ]);
+    const one = (rows: Record<string, string>[]) => { const v = Number(rows[0]?._value); return rows.length && Number.isFinite(v) ? v : null; };
+    const now: Now = { cpu: one(nCpu), memory: one(nMem), disk: nDisk.filter((r) => Number.isFinite(Number(r._value))).map((r) => ({ name: r.name || "?", v: Number(r._value) })).sort((a, b) => a.name.localeCompare(b.name)) };
+    return { cpu: toSeries(cpu, false), memory: toSeries(mem, false), disk: toSeries(disk, true), now, error: null };
   } catch {
-    return { cpu: [], memory: [], disk: [], error: "Performance data could not be read right now." };
+    return { cpu: [], memory: [], disk: [], now: NO_NOW, error: "Performance data could not be read right now." };
   }
 }

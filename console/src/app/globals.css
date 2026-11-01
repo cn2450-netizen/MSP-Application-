@@ -126,3 +126,8 @@ nav.side a .ext { margin-left: auto; opacity: .55; font-size: 12px; }
 .chart svg { display: block; }
 .chart-legend { margin-top: 6px; }
 .chart-legend li { flex-wrap: wrap; }
+
+/* ---- gauges: current value of each measure, history charts below ---- */
+.gauges { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 4px; }
+.gauges .panel { margin-bottom: 0; }
+.gauge-body { display: flex; justify-content: center; }

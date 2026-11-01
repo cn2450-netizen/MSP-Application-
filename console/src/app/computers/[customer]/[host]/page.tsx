@@ -7,6 +7,7 @@ import { ago, bytes, when } from "@/lib/format";
 import { loadFleet } from "@/lib/fleet";
 import { RANGES, loadPerformance, rangeKey } from "@/lib/metrics";
 import LineChart from "../../../LineChart";
+import Gauge from "../../../Gauge";
 
 export const dynamic = "force-dynamic";
 
@@ -75,6 +76,14 @@ export default async function ComputerPage({ params, searchParams }: { params: P
         </span>
       </div>
       {perf.error && <div className="banner warn">{perf.error}</div>}
+      <div className="gauges">
+        <div className="panel"><h3>Processor</h3><div className="body gauge-body"><Gauge percent={perf.now.cpu} label="Processor use" caption="in use now" /></div></div>
+        <div className="panel"><h3>Memory</h3><div className="body gauge-body"><Gauge percent={perf.now.memory} label="Memory use" caption="in use now" /></div></div>
+        {perf.now.disk.map((d) => (
+          <div className="panel" key={d.name}><h3>Disk {d.name}</h3><div className="body gauge-body"><Gauge percent={d.v} label={`Disk ${d.name} used`} caption="space used" /></div></div>
+        ))}
+      </div>
+      <h2 style={{ margin: "18px 0 10px" }}>History</h2>
       <div className="grid2">
         <div className="panel"><h3>Processor use</h3><div className="body"><LineChart title="Processor use" series={perf.cpu.length ? perf.cpu.map((s) => ({ ...s, label: "" })) : []} from={from} to={to} gapMs={gapMs} /></div></div>
         <div className="panel"><h3>Memory use</h3><div className="body"><LineChart title="Memory use" series={perf.memory.map((s) => ({ ...s, label: "" }))} from={from} to={to} gapMs={gapMs} /></div></div>
