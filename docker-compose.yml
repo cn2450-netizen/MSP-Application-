@@ -40,6 +40,8 @@ secrets:
     file: ./secrets/portal_oidc_secret
   bitlocker_escrow_key:
     file: ./secrets/bitlocker_escrow_key
+  portal_influx_token:
+    file: ./secrets/portal_influx_token
 
 services:
   postgres:
@@ -260,8 +262,10 @@ services:
       PORTAL_DB_PASSWORD_FILE: /run/secrets/portal_db_password
       PORTAL_OIDC_SECRET_FILE: /run/secrets/portal_oidc_secret
       BITLOCKER_KEY_FILE: /run/secrets/bitlocker_escrow_key
+      INFLUX_URL: http://influxdb:8086
+      INFLUX_TOKEN_FILE: /run/secrets/portal_influx_token
       NODE_ENV: production
-    secrets: [portal_db_password, portal_oidc_secret, bitlocker_escrow_key]
+    secrets: [portal_db_password, portal_oidc_secret, bitlocker_escrow_key, portal_influx_token]
     ports:
       - "${BIND_ADDR}:${PORTAL_PORT}:3000"
     networks: [edge, backend]

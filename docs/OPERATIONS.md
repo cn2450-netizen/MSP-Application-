@@ -77,6 +77,8 @@ On the Grafana dashboard, click a drive in the BitLocker table: it opens the por
 
 How it works: the portal records a request; `msp-bitlocker.timer` (`sudo scripts/install-bitlocker-executor.sh`, once) runs `scripts/bitlocker-executor.sh` every minute, which pushes `agent/windows/bitlocker-manage.ps1` to the PC through MeshCentral as SYSTEM, deletes it afterwards and stores the key encrypted (pgcrypto) with `secrets/bitlocker_escrow_key`. Like computer replacement it needs a MeshCentral login token (`scripts/mesh-token.sh set`); without one the request fails with a message and can be retried. By hand: `scripts/bitlocker-run.sh <customer> <computer> <drive> enable|escrow`. After editing the dashboard run `python dashboards/build_windows_overview.py && scripts/update-dashboards.sh`.
 
+The portal's **Computers** page lists every monitored computer with its drive encryption next to backup status and whether a key is saved. It reads InfluxDB live with a read-only token (`secrets/portal_influx_token`, created by `scripts/create-portal-influx-token.sh`); nothing is copied into Postgres.
+
 Servers without the BitLocker feature report that (installing it restarts the server, so it is not done automatically). Existing deployments: run `scripts/init-secrets.sh` (creates the new secret), then `docker compose up -d portal`.
 
 ## Host firewall
