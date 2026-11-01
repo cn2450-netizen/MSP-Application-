@@ -81,6 +81,12 @@ The portal's **Computers** page lists every monitored computer with its drive en
 
 Servers without the BitLocker feature report that (installing it restarts the server, so it is not done automatically). Existing deployments: run `scripts/init-secrets.sh` (creates the new secret), then `docker compose up -d portal`.
 
+## Monitoring auto-deploy
+
+A computer that has the MeshCentral agent but has never reported monitoring data gets the monitoring agent installed automatically. `msp-autodeploy.timer` (`sudo scripts/install-autodeploy.sh`, once) runs `scripts/monitoring-autodeploy.sh` every 10 minutes: for each `<customer> / <site>` group it takes the online Mesh devices, subtracts the computers seen in that customer's InfluxDB in the last 7 days (matched on the computer's own name, `rname`, since MeshCentral's display name can differ), and runs `mesh-deploy-monitoring.sh` on the rest. Failures back off (1 h, 6 h, then daily). `generated/autodeploy-skip.txt` (one computer name per line) lists computers never to touch; try `scripts/monitoring-autodeploy.sh --dry-run` to see what it would do.
+
+It signs in as its own limited MeshCentral account `svc-autodeploy` (a local account with a 40-character random password in `generated/mesh-autodeploy-token`, mode 600; rights 252 on customer device groups only, not a site admin). Manage it with `scripts/mesh-autodeploy-account.sh create|grant|status|remove`; `remove` revokes it at once. After adding a site run `grant` so the account can reach the new device group. Remember this account can run commands on every customer computer: keep the VM's `generated/` folder protected.
+
 ## Host firewall
 
 `msp-firewall.service` (`sudo scripts/install-host-firewall.sh`) lets only `NPM_IP` reach the platform's published ports. To reach a port directly while troubleshooting, add your workstation to `FW_ALLOW_FROM` in `.env` and re-run the script, or stop the service (`sudo systemctl stop msp-firewall`) and start it again afterwards. If you change NPM's address, update `NPM_IP` and re-run. `sudo scripts/install-host-firewall.sh --remove` removes it.
