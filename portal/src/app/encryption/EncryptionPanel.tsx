@@ -11,7 +11,7 @@ type Req = {
 const when = (s: string) => new Date(s).toLocaleString();
 const STATUS: Record<Req["status"], string> = { pending: "Waiting", running: "Working", done: "Done", failed: "Failed", cancelled: "Cancelled" };
 
-export default function EncryptionPanel(p: { customer: string | null; host: string | null; volume: string | null; companyName: string | null; customers: { slug: string; name: string }[]; defaultCustomer: string; keys: Key[]; requests: Req[] }) {
+export default function EncryptionPanel(p: { customer: string | null; filter: string | null; host: string | null; volume: string | null; companyName: string | null; customers: { slug: string; name: string }[]; defaultCustomer: string; keys: Key[]; requests: Req[] }) {
   const router = useRouter();
   const [vol, setVol] = useState(p.volume ?? "");
   const [pickCust, setPickCust] = useState(p.defaultCustomer || p.customers[0]?.slug || "");
@@ -68,7 +68,7 @@ export default function EncryptionPanel(p: { customer: string | null; host: stri
     if (j) { setShown({ id: reveal.id, key: j.key }); setReveal(null); }
   }
 
-  const showCompany = !p.customer;
+  const showCompany = !p.customer && !p.filter;
   return (
     <>
       {msg && <div className={`banner ${msg.kind}`}>{msg.text}</div>}

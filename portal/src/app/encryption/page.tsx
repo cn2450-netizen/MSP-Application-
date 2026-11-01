@@ -31,8 +31,10 @@ export default async function Encryption({ searchParams }: { searchParams: Promi
     return (<><h1>Encryption</h1><div className="banner bad">Recovery keys are for support staff only.</div></>);
   }
 
-  const keys = (await listKeys(scope, customer, host)).filter((k) => staff(k.customer_slug));
-  const requests = (await listRequests(scope, customer, host)).filter((r) => staff(r.customer_slug));
+  // the company picked in the top bar narrows the lists too (an explicit ?customer= wins)
+  const filter = customer ?? (view.customer || null);
+  const keys = (await listKeys(scope, filter, host)).filter((k) => staff(k.customer_slug));
+  const requests = (await listRequests(scope, filter, host)).filter((r) => staff(r.customer_slug));
 
   return (
     <>
@@ -40,10 +42,10 @@ export default async function Encryption({ searchParams }: { searchParams: Promi
       <p className="sub">
         {customer && host
           ? <>BitLocker on <strong>{host}</strong> at {names.get(customer) ?? customer}.</>
-          : "BitLocker recovery keys saved by the platform, and requests to turn BitLocker on."}
+          : filter ? `BitLocker recovery keys and requests for ${names.get(filter) ?? filter}.` : "BitLocker recovery keys saved by the platform, and requests to turn BitLocker on."}
       </p>
       <EncryptionPanel
-        customer={customer} host={host} volume={volume}
+        customer={customer} filter={filter} host={host} volume={volume}
         customers={view.customers.filter((x) => staff(x.slug)).map((x) => ({ slug: x.slug, name: x.name }))}
         defaultCustomer={customer ?? view.customer}
         companyName={customer ? names.get(customer) ?? customer : null}
