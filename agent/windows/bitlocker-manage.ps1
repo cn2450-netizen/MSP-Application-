@@ -57,6 +57,11 @@ try {
                 if (-not ($tpm.TpmPresent -and $tpm.TpmReady)) {
                     Result 'error' 'this computer has no ready TPM, so BitLocker cannot protect the Windows drive without a startup key or password: not changed'; return
                 }
+                # Policy often requires a recovery password to exist BEFORE encryption starts, so add it first.
+                if ((Recovery-Protectors $mp).Count -eq 0) {
+                    $step = 'adding the recovery password'
+                    Add-BitLockerKeyProtector -MountPoint $mp -RecoveryPasswordProtector | Out-Null
+                }
                 $step = 'enabling BitLocker with the TPM'
                 $ep = Enable-Params $mp $true
                 Enable-BitLocker @ep -TpmProtector -SkipHardwareTest | Out-Null
