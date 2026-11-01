@@ -117,3 +117,12 @@ nav.side a .ext { margin-left: auto; opacity: .55; font-size: 12px; }
 .pager .btn.on { background: var(--brand); color: var(--brand-text); border-color: var(--brand); font-weight: 600; }
 .pager .btn.off { opacity: .45; cursor: default; }
 .pill + .pill { margin-left: 6px; }
+
+/* ---- performance charts ---- */
+.perf-head { justify-content: space-between; margin: 22px 0 10px; }
+.ranges { display: flex; gap: 6px; flex-wrap: wrap; }
+.ranges .btn { padding: 4px 11px; }
+.ranges .btn.on { background: var(--brand); color: var(--brand-text); border-color: var(--brand); font-weight: 600; }
+.chart svg { display: block; }
+.chart-legend { margin-top: 6px; }
+.chart-legend li { flex-wrap: wrap; }

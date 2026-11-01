@@ -5,14 +5,17 @@ import { env } from "@/lib/env";
 import { getView } from "@/lib/view";
 import { ago, bytes, when } from "@/lib/format";
 import { loadFleet } from "@/lib/fleet";
+import { RANGES, loadPerformance, rangeKey } from "@/lib/metrics";
+import LineChart from "../../../LineChart";
 
 export const dynamic = "force-dynamic";
 
 // One computer: header, then the same facts the list shows, in full. Charts, events and Connect arrive in later steps.
-export default async function ComputerPage({ params }: { params: Promise<{ customer: string; host: string }> }) {
+export default async function ComputerPage({ params, searchParams }: { params: Promise<{ customer: string; host: string }>; searchParams: Promise<{ range?: string }> }) {
   const scope = await getScope();
   if (!scope) redirect("/login");
   const { customer, host } = await params;
+  const range = rangeKey((await searchParams).range);
   // A computer you may not see answers 404, the same as one that does not exist.
   if (!/^[a-z0-9][a-z0-9-]{1,30}$/.test(customer) || !/^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$/.test(host) || !canSee(scope, customer)) notFound();
 
@@ -22,6 +25,8 @@ export default async function ComputerPage({ params }: { params: Promise<{ custo
   if (!r) notFound();
   const staff = isStaffFor(scope, customer);
   const classic = env.legacyUrl;
+  const perf = await loadPerformance(customer, host, range);
+  const to = Date.now(), from = to - RANGES[range].ms, gapMs = RANGES[range].ms / 40;
 
   return (
     <>
@@ -61,6 +66,20 @@ export default async function ComputerPage({ params }: { params: Promise<{ custo
           </div>
         </div>
       </div>
+      <div className="row perf-head">
+        <h2 style={{ margin: 0 }}>Performance</h2>
+        <span className="ranges">
+          {(Object.keys(RANGES) as (keyof typeof RANGES)[]).map((k) => (
+            <a key={k} className={`btn small${k === range ? " on" : ""}`} href={`?range=${k}`} aria-current={k === range ? "true" : undefined}>{RANGES[k].label}</a>
+          ))}
+        </span>
+      </div>
+      {perf.error && <div className="banner warn">{perf.error}</div>}
+      <div className="grid2">
+        <div className="panel"><h3>Processor use</h3><div className="body"><LineChart title="Processor use" series={perf.cpu.length ? perf.cpu.map((s) => ({ ...s, label: "" })) : []} from={from} to={to} gapMs={gapMs} /></div></div>
+        <div className="panel"><h3>Memory use</h3><div className="body"><LineChart title="Memory use" series={perf.memory.map((s) => ({ ...s, label: "" }))} from={from} to={to} gapMs={gapMs} /></div></div>
+      </div>
+      <div className="panel"><h3>Disk space used</h3><div className="body"><LineChart title="Disk space used" series={perf.disk} from={from} to={to} gapMs={gapMs} /></div></div>
     </>
   );
 }
