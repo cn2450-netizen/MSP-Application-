@@ -77,20 +77,23 @@ export default function EncryptionPanel(p: { stats: { connected: number; protect
       <div className="enc-top">
       {(p.customers.length > 0) && (
         <div className="card enc-form">
-          {!p.host && (
-            <div className="stack" style={{ marginBottom: 12 }}>
-              <label>Company{" "}
-                <select value={pickCust} onChange={(e) => setPickCust(e.target.value)}>
-                  {p.customers.map((c) => <option key={c.slug} value={c.slug}>{c.name}</option>)}
-                </select>
-              </label>
-              <label>Computer name{" "}
-                <input value={pickHost} onChange={(e) => setPickHost(e.target.value)} placeholder="e.g. DESKTOP-UJPN596" />
-              </label>
-            </div>
-          )}
-          <strong>Drive</strong>{" "}
-          <input value={vol} onChange={(e) => setVol(e.target.value.replace(/[^A-Za-z]/g, "").slice(0, 1).toUpperCase())} size={2} aria-label="Drive letter" style={{ width: 40, textAlign: "center" }} /> :
+          <div className="fields">
+            {!p.host && (
+              <>
+                <label>Company
+                  <select value={pickCust} onChange={(e) => setPickCust(e.target.value)}>
+                    {p.customers.map((c) => <option key={c.slug} value={c.slug}>{c.name}</option>)}
+                  </select>
+                </label>
+                <label>Computer name
+                  <input value={pickHost} onChange={(e) => setPickHost(e.target.value)} placeholder="e.g. DESKTOP-UJPN596" />
+                </label>
+              </>
+            )}
+            <label className="drive-field">Drive
+              <input value={vol} onChange={(e) => setVol(e.target.value.replace(/[^A-Za-z]/g, "").slice(0, 1).toUpperCase())} size={2} aria-label="Drive letter" style={{ textAlign: "center" }} />
+            </label>
+          </div>
           <div className="row" style={{ marginTop: 12, gap: 8, flexWrap: "wrap" }}>
             <button className="primary" disabled={busy || !vol || !host} onClick={() => request("enable")}>Turn on BitLocker</button>
             <button disabled={busy || !vol || !host} onClick={() => request("escrow")}>Save the recovery key</button>
