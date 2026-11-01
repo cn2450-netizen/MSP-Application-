@@ -131,3 +131,7 @@ nav.side a .ext { margin-left: auto; opacity: .55; font-size: 12px; }
 .gauges { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 4px; }
 .gauges .panel { margin-bottom: 0; }
 .gauge-body { display: flex; justify-content: center; }
+
+/* ---- encryption gauges on the computer page: one per drive, green at 100 % ---- */
+.enc-gauges { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
+.enc-gauge-item { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 0 1 220px; text-align: center; }

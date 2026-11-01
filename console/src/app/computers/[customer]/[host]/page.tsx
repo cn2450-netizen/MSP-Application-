@@ -39,16 +39,12 @@ export default async function ComputerPage({ params, searchParams }: { params: P
         <div className="panel">
           <h3>Drive encryption</h3>
           <div className="body">
-            {r.drives.length === 0 ? <span className="muted">The monitoring agent has not reported any drives.</span> : r.drives.map((d) => (
-              <div key={d.volume} className="kv">
-                <strong>{d.volume}:</strong>
-                <span className="bar grow" role="progressbar" aria-valuenow={Math.round(d.percent)} aria-valuemin={0} aria-valuemax={100}>
-                  <div className={d.state.key} style={{ width: `${Math.max(0, Math.min(100, d.percent))}%` }} />
-                </span>
-                <span className={`pill ${d.state.key}`}>{d.state.label}</span>
-                <span className="muted small">{d.key_saved ? "key saved" : "no key saved"}</span>
+            {r.drives.length === 0 ? <span className="muted">The monitoring agent has not reported any drives.</span> : <div className="enc-gauges">{r.drives.map((d) => (
+              <div key={d.volume} className="enc-gauge-item">
+                <Gauge percent={d.percent} label={`Drive ${d.volume} encryption`} caption={`Drive ${d.volume}:`} goodHigh />
+                <div><span className={`pill ${d.state.key}`}>{d.state.label}</span> <span className="muted small">{d.key_saved ? "key saved" : "no key saved"}</span></div>
               </div>
-            ))}
+            ))}</div>}
             {staff && r.drives.length > 0 && classic && <p><a className="btn small" href={`${classic}/encryption?customer=${customer}&host=${host}&volume=${r.drives[0].volume}`}>Manage encryption and keys</a></p>}
           </div>
         </div>
