@@ -104,6 +104,7 @@ nav.side a.on { background: var(--hover); color: var(--text); box-shadow: inset 
 .enc-form .fields { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
 .enc-form .fields label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); flex: 1 1 200px; min-width: 0; }
 .enc-form .fields label.drive-field { flex: 0 0 64px; }
+.enc-form .fields label.company-field { flex: 1 1 100%; }
 .enc-form .fields input, .enc-form .fields select { width: 100%; }
 @media (max-width: 760px) { .enc-top .enc-gauge { flex: 1 1 100%; } }
 .gauge { display: flex; justify-content: center; }

@@ -80,7 +80,7 @@ export default function EncryptionPanel(p: { stats: { connected: number; protect
           <div className="fields">
             {!p.host && (
               <>
-                <label>Company
+                <label className="company-field">Company
                   <select value={pickCust} onChange={(e) => setPickCust(e.target.value)}>
                     {p.customers.map((c) => <option key={c.slug} value={c.slug}>{c.name}</option>)}
                   </select>
