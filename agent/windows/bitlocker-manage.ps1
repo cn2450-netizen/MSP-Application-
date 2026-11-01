@@ -76,5 +76,5 @@ try {
     Result 'ok' $summary.Trim()
 }
 catch {
-    Result 'error' ("while $step: " + [string]$_.Exception.Message)
+    Result 'error' ("while ${step}: " + [string]$_.Exception.Message)
 }
