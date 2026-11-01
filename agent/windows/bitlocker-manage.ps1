@@ -22,6 +22,7 @@ function Recovery-Protectors($mp) {
     @((Get-BitLockerVolume -MountPoint $mp).KeyProtector | Where-Object { "$($_.KeyProtectorType)" -eq 'RecoveryPassword' })
 }
 
+$step = 'starting'
 try {
     $letter = $Volume.ToUpper()
     $mp = "${letter}:"
@@ -37,13 +38,16 @@ try {
         $status = "$($v.VolumeStatus)"
         if ($status -eq 'FullyDecrypted') {
             if ($mp -eq $env:SystemDrive) {
+                $step = 'checking the TPM'
                 $tpm = Get-Tpm
                 if (-not ($tpm.TpmPresent -and $tpm.TpmReady)) {
                     Result 'error' 'this computer has no ready TPM, so BitLocker cannot protect the Windows drive without a startup key or password: not changed'; return
                 }
+                $step = 'enabling BitLocker with the TPM'
                 Enable-BitLocker -MountPoint $mp -EncryptionMethod XtsAes256 -UsedSpaceOnly -TpmProtector -SkipHardwareTest | Out-Null
             }
             else {
+                $step = 'enabling BitLocker with a recovery password'
                 Enable-BitLocker -MountPoint $mp -EncryptionMethod XtsAes256 -UsedSpaceOnly -RecoveryPasswordProtector | Out-Null
                 try { Enable-BitLockerAutoUnlock -MountPoint $mp | Out-Null }
                 catch { $note = ' The drive will not unlock by itself until the Windows drive is encrypted: run this again afterwards.' }
@@ -51,6 +55,7 @@ try {
             $note = "BitLocker turned on, encrypting in the background.$note"
         }
         elseif ("$($v.ProtectionStatus)" -ne 'On') {
+            $step = 'resuming protection'
             Resume-BitLocker -MountPoint $mp | Out-Null
             $note = 'BitLocker was suspended: protection resumed.'
         }
@@ -58,6 +63,7 @@ try {
     }
 
     # make sure there is a recovery password, then report every one
+    $step = 'reading the recovery key'
     $rps = Recovery-Protectors $mp
     if ($rps.Count -eq 0 -and "$((Get-BitLockerVolume -MountPoint $mp).VolumeStatus)" -ne 'FullyDecrypted') {
         Add-BitLockerKeyProtector -MountPoint $mp -RecoveryPasswordProtector | Out-Null
@@ -70,5 +76,5 @@ try {
     Result 'ok' $summary.Trim()
 }
 catch {
-    Result 'error' ([string]$_.Exception.Message)
+    Result 'error' ("while $step: " + [string]$_.Exception.Message)
 }
