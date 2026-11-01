@@ -38,6 +38,8 @@ secrets:
     file: ./secrets/portal_db_password
   portal_oidc_secret:
     file: ./secrets/portal_oidc_secret
+  console_oidc_secret:
+    file: ./secrets/console_oidc_secret
   bitlocker_escrow_key:
     file: ./secrets/bitlocker_escrow_key
   portal_influx_token:
@@ -268,6 +270,43 @@ services:
     secrets: [portal_db_password, portal_oidc_secret, bitlocker_escrow_key, portal_influx_token]
     ports:
       - "${BIND_ADDR}:${PORTAL_PORT}:3000"
+    networks: [edge, backend]
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  # The unified console (the future front door): one app for computers, health, encryption, backups and remote access.
+  # It reads InfluxDB and the portal database and signs in through authentik (OIDC). The backup portal keeps serving
+  # the agents; see docs/UNIFIED-PORTAL.md.
+  console:
+    <<: *common
+    build:
+      context: ./console
+    image: msp-platform/console:local
+    read_only: true
+    cap_drop: [ALL]
+    tmpfs:
+      - /tmp
+      - /app/.next/cache
+    environment:
+      CONSOLE_HOST: ${CONSOLE_HOST}
+      PORTAL_HOST: ${PORTAL_HOST}
+      MESH_HOST: ${MESH_HOST}
+      AUTH_HOST: ${AUTH_HOST}
+      CONSOLE_NAME: ${CONSOLE_NAME:-MSP Console}
+      CONSOLE_SHORT: ${CONSOLE_SHORT:-MSP}
+      CONSOLE_TAGLINE: ${CONSOLE_TAGLINE:-}
+      CONSOLE_SUPPORT: ${CONSOLE_SUPPORT:-}
+      CONSOLE_LOGO: ${CONSOLE_LOGO:-}
+      PORTAL_DB_HOST: postgres
+      PORTAL_DB_PASSWORD_FILE: /run/secrets/portal_db_password
+      CONSOLE_OIDC_SECRET_FILE: /run/secrets/console_oidc_secret
+      BITLOCKER_KEY_FILE: /run/secrets/bitlocker_escrow_key
+      INFLUX_URL: http://influxdb:8086
+      INFLUX_TOKEN_FILE: /run/secrets/portal_influx_token
+      NODE_ENV: production
+    secrets: [portal_db_password, console_oidc_secret, bitlocker_escrow_key, portal_influx_token]
+    ports:
+      - "${BIND_ADDR}:${CONSOLE_PORT:-3200}:3000"
     networks: [edge, backend]
     depends_on:
       postgres: { condition: service_healthy }

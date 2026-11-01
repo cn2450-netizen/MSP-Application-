@@ -124,5 +124,31 @@ else
   echo "    skipped (PORTAL_HOST not set or secrets/portal_oidc_secret missing; run scripts/init-secrets.sh)"
 fi
 
+echo "Console application (OIDC)"
+if [[ -n "${CONSOLE_HOST:-}" && -s secrets/console_oidc_secret ]]; then
+  console_json="$(jq -n --arg af "$auth_flow" --arg inf "$inv_flow" --arg key "$key" --argjson maps "$maps" --arg secret "$(cat secrets/console_oidc_secret)" --arg redirect "https://${CONSOLE_HOST}/auth/callback" \
+    '{name:"Console",authorization_flow:$af,invalidation_flow:$inf,client_type:"confidential",
+      client_id:"console",client_secret:$secret,
+      redirect_uris:[{matching_mode:"strict",url:$redirect}],
+      signing_key:$key,property_mappings:$maps,issuer_mode:"per_provider",
+      grant_types:["authorization_code"]}')"
+  cprov="$(ak_req GET 'providers/oauth2/?name=Console' | jq -r '.results[0].pk // empty')"
+  if [[ -n "$cprov" ]]; then ak_req PATCH "providers/oauth2/${cprov}/" "$console_json" >/dev/null
+  else cprov="$(ak_req POST providers/oauth2/ "$console_json" | jq -r '.pk')"; fi
+  capp_json="$(jq -n --argjson p "$cprov" --arg url "https://${CONSOLE_HOST}/" '{name:"Console",slug:"console",provider:$p,meta_launch_url:$url,group:"Platform",open_in_new_tab:false}')"
+  if ak_req GET 'core/applications/console/' >/dev/null 2>&1; then ak_req PATCH core/applications/console/ "$capp_json" >/dev/null
+  else ak_req POST core/applications/ "$capp_json" >/dev/null; fi
+  capp="$(ak_req GET core/applications/console/ | jq -r '.pk')"
+  ak_bind_group "$capp" "$admins"
+  # The console serves the same people as the backup portal: carry over every group that app already admits.
+  papp_id="$(ak_req GET core/applications/portal/ 2>/dev/null | jq -r '.pk // empty' || true)"
+  if [[ -n "$papp_id" ]]; then
+    for g in $(ak_req GET "policies/bindings/?target=${papp_id}&page_size=500" | jq -r '.results[]|.group // empty'); do ak_bind_group "$capp" "$g"; done
+  fi
+  echo "    Console provider $cprov, application $capp, access limited to bound groups"
+else
+  echo "    skipped (CONSOLE_HOST not set or secrets/console_oidc_secret missing; run scripts/init-secrets.sh)"
+fi
+
 echo
 echo "Done. Next: sign in at https://${AUTH_HOST}/ as akadmin (password in secrets/authentik_bootstrap_password) — you will be asked to enrol an authenticator."

@@ -93,6 +93,8 @@ mesh_app="$(ak_req GET core/applications/meshcentral/ 2>/dev/null | jq -r '.pk /
 if [[ -n "$mesh_app" ]]; then ak_bind_group "$mesh_app" "$tech_grp"; fi   # remote access is for staff only
 portal_app="$(ak_req GET core/applications/portal/ 2>/dev/null | jq -r '.pk // empty' || true)"
 if [[ -n "$portal_app" ]]; then ak_bind_group "$portal_app" "$tech_grp"; ak_bind_group "$portal_app" "$cust_grp"; fi   # backup portal: staff and the customer's own users
+console_app="$(ak_req GET core/applications/console/ 2>/dev/null | jq -r '.pk // empty' || true)"
+if [[ -n "$console_app" ]]; then ak_bind_group "$console_app" "$tech_grp"; ak_bind_group "$console_app" "$cust_grp"; fi   # the console: same people as the backup portal
 
 echo "[5/5] Registry + Grafana org mapping"
 printf '%s\t%s\t%s\n' "$slug" "$name" "$(date -u +%FT%TZ)" >> generated/customers.tsv
