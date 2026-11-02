@@ -21,7 +21,8 @@ SKIP=generated/autodeploy-skip.txt
 [[ -s "$TOKEN" ]] || { echo "no auto-deploy token (generated/mesh-autodeploy-token): nothing done" >&2; exit 0; }
 export MESH_TOKEN_USER="$(sed -n 1p "$TOKEN")" MESH_TOKEN_PASS="$(sed -n 2p "$TOKEN")"
 source scripts/lib/meshcentral.sh
-exec 9>/run/user/$(id -u)/msp-autodeploy.lock 2>/dev/null || exec 9>/tmp/msp-autodeploy.lock
+lock=/run/user/$(id -u)/msp-autodeploy.lock; [[ -w "${lock%/*}" ]] || lock=/tmp/msp-autodeploy.lock
+exec 9>"$lock"          # (a redirect on exec itself would silence stderr for the rest of the script)
 flock -n 9 || exit 0
 mesh_login || { echo "the auto-deploy token was rejected or expired: renew it with scripts/mesh-autodeploy-token.sh set" >&2; exit 1; }
 touch "$STATE" "$SKIP"
