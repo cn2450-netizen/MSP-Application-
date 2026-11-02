@@ -37,7 +37,7 @@ conf = open("agent/windows/telegraf.conf.tmpl", encoding="utf-8").read()
 for k, v in {"CUSTOMER": slug, "SITE": site, "INGEST_HOST": host,
              "INFLUX_WRITE_TOKEN": vals["influx WRITE tk"], "LOKI_PUSH_KEY": vals["loki push key"]}.items():
     conf = conf.replace("{{" + k + "}}", v)   # {{AGENT_DIR}} is filled in on the PC at install time
-HELPERS = ["bitlocker.ps1", "volumes.ps1", "patches.ps1"]
+HELPERS = ["bitlocker.ps1", "volumes.ps1", "patches.ps1", "agentinfo.ps1"]
 scripts = {n: open("agent/windows/" + n, "rb").read() for n in HELPERS}
 for name, data in [("telegraf.conf.tmpl", conf.encode())] + list(scripts.items()):
     try: data.decode("ascii")

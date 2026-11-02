@@ -8,6 +8,7 @@ import { loadFleet } from "@/lib/fleet";
 import { RANGES, loadPerformance, rangeKey } from "@/lib/metrics";
 import { loadPatches } from "@/lib/patches";
 import { loadServices } from "@/lib/services";
+import { loadStuck } from "@/lib/agentupdate";
 import { loadLogs, LOG_DAYS } from "@/lib/logs";
 import { loadSignIns, SIGNIN_DAYS } from "@/lib/signins";
 import Pager, { PAGE_SIZE, pageOf } from "../../../Pager";
@@ -31,6 +32,7 @@ export default async function ComputerPage({ params, searchParams }: { params: P
   const r = rows.find((x) => x.slug === customer && x.host === host);
   if (!r) notFound();
   const staff = isStaffFor(scope, customer);
+  const stuck = staff ? (await loadStuck()).get(`${customer}|${host}`) : undefined;
   const classic = env.legacyUrl;
   const [perf, patches, services, logs, signins] = await Promise.all([loadPerformance(customer, host, range), loadPatches(customer, host), loadServices(customer, host), loadLogs(customer, host), loadSignIns(customer, host)]);
   const spage = pageOf(sp.spage, services.rows.length), cpage = pageOf(sp.cpage, patches.rows.length), lpage = pageOf(sp.lpage, logs.rows.length), ipage = pageOf(sp.ipage, signins.rows.length);
@@ -53,6 +55,7 @@ export default async function ComputerPage({ params, searchParams }: { params: P
   return (
     <>
       <p className="small"><a href="/computers">← Computers</a></p>
+      {stuck && <div className="banner warn">The monitoring agent on this computer could not be updated automatically ({stuck.failures} failed {stuck.failures === 1 ? "try" : "tries"}{stuck.reason ? `: ${stuck.reason}` : ""}). Automatic updates are paused for it until a technician clears it: <code>scripts/autoupdate-clear.sh {customer} {host}</code> on the server.</div>}
       <h1><span className={`dot ${r.online ? "ok" : "none"}`} />{r.name}</h1>
       <p className="sub">{r.customerName}{r.site !== "main" ? ` · ${r.site}` : ""} · {r.online ? "online now" : `last seen ${ago(r.lastSeen)}`}{r.m?.os_desc ? ` · ${r.m.os_desc}` : ""}</p>
 

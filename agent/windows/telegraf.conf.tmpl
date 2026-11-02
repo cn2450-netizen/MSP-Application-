@@ -75,6 +75,13 @@
   timeout = "20s"
   interval = "300s"
 
+# Which revision of this setup the computer runs, so the server can find and update computers that are behind - see agentinfo.ps1.
+[[inputs.exec]]
+  commands = [["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "{{AGENT_DIR}}/agentinfo.ps1"]]
+  data_format = "influx"
+  timeout = "20s"
+  interval = "300s"
+
 # Drive letter + volume label, size and free space (adds the label Telegraf's disk input lacks) - see volumes.ps1
 [[inputs.exec]]
   commands = [["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "{{AGENT_DIR}}/volumes.ps1"]]

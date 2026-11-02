@@ -3,6 +3,8 @@ import { getScope } from "@/lib/session";
 import { getView } from "@/lib/view";
 import { ago, when } from "@/lib/format";
 import { loadHealth, type Light } from "@/lib/health";
+import { loadStuck } from "@/lib/agentupdate";
+import { isStaffFor } from "@/lib/authz";
 import { backupNeedsLook, fullyEncrypted, keyMissing, loadFleet, notFullyEncrypted } from "@/lib/fleet";
 import Filters from "../Filters";
 import Pager, { PAGE_SIZE, pageOf } from "../Pager";
@@ -38,7 +40,7 @@ export default async function Computers({ searchParams }: { searchParams: Promis
   const multi = !view.customer && (scope.admin || view.customers.length > 1);
   const page = pageOf(sp.page, shown.length);
   const pageRows = shown.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const lights = await loadHealth(pageRows);
+  const [lights, stuck] = await Promise.all([loadHealth(pageRows), loadStuck()]);
 
   return (
     <>
@@ -63,6 +65,7 @@ export default async function Computers({ searchParams }: { searchParams: Promis
                       <span className={`dot ${r.online ? "ok" : "none"}`} title={r.online ? "Online" : "Not online"} />
                       <a href={`/computers/${r.slug}/${r.host}`}>{r.name}</a>
                       {r.site !== "main" && <span className="muted small"> · {r.site}</span>}
+                      {stuck.has(r.key) && isStaffFor(scope, r.slug) && <span className="pill bad" style={{ marginLeft: 8 }} title={`Automatic agent update failed ${stuck.get(r.key)!.failures} times: ${stuck.get(r.key)!.reason}. Needs a technician.`}>Agent update stuck</span>}
                     </td>
                     {multi && <td className="muted">{r.customerName}</td>}
                     {(["encryption", "backup", "services", "updates", "performance"] as const).map((k) => <Lamp key={k} light={lights.get(r.key)![k]} what={k} />)}
