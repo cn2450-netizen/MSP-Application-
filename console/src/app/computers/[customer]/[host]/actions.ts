@@ -18,9 +18,12 @@ export async function requestRestart(form: FormData) {
   if (!isStaffFor(scope, customer)) redirect(back);
   const listed = (await loadServices(customer, host)).rows.find((s) => s.name === service);
   if (!listed || !canRestart(listed.name)) redirect(`${back}#services`);
-  const made = await q(
+  let made: unknown[] = [];
+  try {
+    made = await q(
     `INSERT INTO service_restart(customer_slug, host, service_name, display_name, requested_by) VALUES ($1,$2,$3,$4,$5)
      ON CONFLICT DO NOTHING RETURNING id`, [customer, host, listed.name, listed.display, scope.username]);
+  } catch { /* a bad name or a database hiccup must not take the page down */ }
   if (made.length) await audit(scope, "service.restart", { customer, detail: { host, service: listed.name } });
   redirect(`${back}#services`);
 }

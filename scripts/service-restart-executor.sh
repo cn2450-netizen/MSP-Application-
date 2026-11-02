@@ -27,8 +27,9 @@ row="$(psql_portal -c "
 [[ -n "$row" ]] || exit 0
 IFS=$'\t' read -r id cust host svc <<<"$row"
 fail() { psql_portal -v id="$id" -v m="$1" <<<"UPDATE service_restart SET status = 'failed', message = :'m', finished_at = now() WHERE id = :'id'" >/dev/null; echo "restart ${cust}/${host} ${svc}: $1"; exit 1; }
-if ! [[ "$id" =~ ^[0-9a-f-]{36}$ && "$cust" =~ ^[a-z0-9][a-z0-9-]{1,30}$ && "$host" =~ ^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$ && "$svc" =~ ^[A-Za-z0-9_.\$-]{1,80}$ ]]; then fail "the request holds an unexpected value"; fi
-[[ "${svc,,}" == mspagent ]] && fail "the monitoring agent's own service is never restarted from here"
+svc_re='^[A-Za-z0-9 ._()$#+/:@-]{1,120}$'      # the monitoring data names services by display name; anything stranger is refused
+if ! [[ "$id" =~ ^[0-9a-f-]{36}$ && "$cust" =~ ^[a-z0-9][a-z0-9-]{1,30}$ && "$host" =~ ^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$ && "$svc" =~ $svc_re ]]; then fail "the request holds an unexpected value"; fi
+[[ "${svc,,}" == mspagent || "${svc,,}" == "msp monitoring agent" ]] && fail "the monitoring agent's own service is never restarted from here"
 
 wait_again() {   # computer off: keep the request, retry later, give up after a day
   psql_portal -v id="$id" -v m="Waiting: $1" <<<"UPDATE service_restart SET status = CASE WHEN requested_at < now() - interval '1 day' THEN 'failed' ELSE 'pending' END, message = CASE WHEN requested_at < now() - interval '1 day' THEN 'Gave up after a day. ' || :'m' ELSE :'m' END, finished_at = CASE WHEN requested_at < now() - interval '1 day' THEN now() END WHERE id = :'id'" >/dev/null
@@ -45,11 +46,13 @@ done < <(mc ListDeviceGroups --json | jq -r --arg p "${cust} / " '.[]|select(.na
 [[ -n "$dev" ]] || wait_again "${host} is not online in MeshCentral"
 
 # PowerShell single quotes around the name (validated above), cmd double quotes around the whole command
-ps="try { Restart-Service -Name '${svc}' -Force -ErrorAction Stop; \$s = (Get-Service -Name '${svc}').Status; Write-Output ('MSP-SVC-RESULT|ok|' + \$s) } catch { Write-Output ('MSP-SVC-RESULT|fail|' + \$_.Exception.Message) }"
+# The name may be the short service name or the display name, so look it up by either.
+ps="try { \$sv = Get-Service | Where-Object { \$_.Name -eq '${svc}' -or \$_.DisplayName -eq '${svc}' } | Select-Object -First 1; if (-not \$sv) { throw 'service not found' }; if (\$sv.Name -eq 'MSPAgent') { throw 'the monitoring agent is never restarted from here' }; Restart-Service -InputObject \$sv -Force -ErrorAction Stop; \$sv.Refresh(); Write-Output ('MSP-SVC-RESULT|ok|' + \$sv.Status) } catch { Write-Output ('MSP-SVC-RESULT|fail|' + \$_.Exception.Message) }"
 reply="$(timeout 240 docker compose exec -T meshcentral node "$MESH_CTL" RunCommand --id "$dev" --reply \
   --run "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"${ps}\"" \
   --url ws://127.0.0.1:4430 --loginuser "$MESH_USER" --loginpass "$MESH_PASS" </dev/null 2>&1 | tr -d '\r' || true)"
 result="$(grep -E '^MSP-SVC-RESULT\|' <<<"$reply" | tail -1)"
+grep -qi "access denied" <<<"$reply" && wait_again "the MeshCentral account is not allowed to run commands yet (scripts/mesh-autodeploy-account.sh grant)"
 [[ -n "$result" ]] || wait_again "no answer from ${host} (it may have gone offline)"
 state="$(cut -d'|' -f2 <<<"$result")"; text="$(cut -d'|' -f3- <<<"$result" | tr -cd '[:print:]' | cut -c1-300)"
 if [[ "$state" == ok && "${text,,}" == running ]]; then

@@ -7,14 +7,15 @@
 #   scripts/mesh-autodeploy-account.sh remove   delete the account and the stored login (revokes it at once)
 # create/grant/remove need YOUR short-lived login token (scripts/mesh-token.sh set). The account is NOT a site admin and
 # has no user-management rights: only 4 manage computers + 8 remote control + 16 agent console + 32 server files +
-# 64 wake + 128 notes = 252 on customer device groups, the same rights the customers' technicians get.
+# 64 wake + 128 notes + 131072 remote commands = 131324 on customer device groups. (Remote commands are what the installer
+# push and the service restart run through; without them MeshCentral answers "Access denied".)
 # The password reaches MeshCentral once, as a meshctrl argument on this host (visible to local root for a moment).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 set -a; source .env; set +a
 NAME=svc-autodeploy
 FILE=generated/mesh-autodeploy-token
-RIGHTS=252
+RIGHTS=131324      # 252 + 131072 (remote commands): RunCommand answers "Access denied" without it
 source scripts/lib/meshcentral.sh
 cmd="${1:-}"
 

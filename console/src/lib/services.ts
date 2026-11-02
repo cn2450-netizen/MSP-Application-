@@ -31,8 +31,10 @@ from(bucket: "cust_${slug}") |> range(start: -15m)
 }
 
 /** Services that are never restarted from the console: the monitoring agent's own service. Everything else can be. */
-const NEVER_RESTART = new Set(["mspagent"]);
-export const canRestart = (name: string) => !NEVER_RESTART.has(name.toLowerCase());
+const NEVER_RESTART = new Set(["mspagent", "msp monitoring agent"]);       // its service name and its display name
+/** Names the restart can carry safely onto a command line; anything stranger simply gets no button. */
+const RESTARTABLE = /^[A-Za-z0-9 ._()$#+/:@-]{1,120}$/;
+export const canRestart = (name: string) => RESTARTABLE.test(name) && !NEVER_RESTART.has(name.toLowerCase());
 
 export type Restart = { status: "pending" | "running" | "done" | "failed" | "cancelled"; message: string; at: string };
 
