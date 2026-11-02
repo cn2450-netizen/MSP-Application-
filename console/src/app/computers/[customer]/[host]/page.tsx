@@ -76,6 +76,8 @@ export default async function ComputerPage({ params, searchParams }: { params: P
           <h3>{r.m && classic ? <a className="btn small" href={`${classic}/machines/${r.m.id}`} title="Browse, restore and schedule">Backup</a> : <>Backup</>} {r.m && <span className="muted small">· {r.backup!.label}</span>}</h3>
           <div className="body gauge-body"><Gauge percent={backupFresh} label="Backup freshness" caption={r.m ? (r.m.last_success ? `last good ${ago(r.m.last_success)}` : "no good backup yet") : "not set up"} goodHigh /></div>
         </div>
+        <div className="panel"><h3>Services running</h3><div className="body gauge-body"><Gauge percent={services.total ? (services.running / services.total) * 100 : null} label="Automatic services running" caption={services.total ? `${services.running} of ${services.total} running` : "no data"} goodHigh /></div></div>
+        <div className="panel"><h3>Updates installed OK</h3><div className="body gauge-body"><Gauge percent={patches.health} label="Update installs that succeeded" caption={patches.compliance.label} goodHigh /></div></div>
       </div>
 
       <h2 style={{ margin: "18px 0 10px" }}>History</h2>
@@ -88,7 +90,6 @@ export default async function ComputerPage({ params, searchParams }: { params: P
       <div className="grid2">
         <div className="panel" id="services">
           <h3>Services (start automatically)</h3>
-          <div className="body gauge-body"><Gauge percent={services.total ? (services.running / services.total) * 100 : null} label="Automatic services running" caption={services.total ? `${services.running} of ${services.total} running` : "no data"} goodHigh /></div>
           <div className="body">
             {services.error ? <span className="muted">{services.error}</span> : services.total === 0 ? <span className="muted">No service list reported yet. The monitoring agent needs the latest update.</span>
               : <span className={`pill ${stopped ? "bad" : "ok"}`}>{stopped ? `${stopped} stopped` : "All running"}</span>}
@@ -110,7 +111,6 @@ export default async function ComputerPage({ params, searchParams }: { params: P
 
         <div className="panel" id="patching">
           <h3>Compliance and update history</h3>
-          <div className="body gauge-body"><Gauge percent={patches.health} label="Update installs that succeeded" caption={patches.compliance.label} goodHigh /></div>
           <div className="body">
             <p><span className={`pill ${patches.compliance.key}`}>{patches.compliance.label}</span> <span className="muted small">{patches.compliance.detail}</span></p>
             {patches.lastInstall && <div className="kv"><span className="muted">Last update installed</span><span>{patches.lastInstall}</span></div>}
