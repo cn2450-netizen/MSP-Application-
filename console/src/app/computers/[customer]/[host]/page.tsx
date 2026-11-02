@@ -7,7 +7,8 @@ import { ago, bytes, when } from "@/lib/format";
 import { loadFleet } from "@/lib/fleet";
 import { RANGES, loadPerformance, rangeKey } from "@/lib/metrics";
 import { loadPatches } from "@/lib/patches";
-import { loadServices } from "@/lib/services";
+import { loadServices, loadRestarts, canRestart } from "@/lib/services";
+import { requestRestart } from "./actions";
 import { loadStuck } from "@/lib/agentupdate";
 import { loadLogs, LOG_DAYS } from "@/lib/logs";
 import { loadSignIns, SIGNIN_DAYS } from "@/lib/signins";
@@ -35,6 +36,7 @@ export default async function ComputerPage({ params, searchParams }: { params: P
   const stuck = staff ? (await loadStuck()).get(`${customer}|${host}`) : undefined;
   const classic = env.legacyUrl;
   const [perf, patches, services, logs, signins] = await Promise.all([loadPerformance(customer, host, range), loadPatches(customer, host), loadServices(customer, host), loadLogs(customer, host), loadSignIns(customer, host)]);
+  const restarts = await loadRestarts(customer, host);
   const spage = pageOf(sp.spage, services.rows.length), cpage = pageOf(sp.cpage, patches.rows.length), lpage = pageOf(sp.lpage, logs.rows.length), ipage = pageOf(sp.ipage, signins.rows.length);
   const num = (n: number) => (n > 1 ? String(n) : undefined);
   const path = `/computers/${customer}/${host}`;
@@ -109,10 +111,32 @@ export default async function ComputerPage({ params, searchParams }: { params: P
           {services.total > 0 && (
             <div className="scroll">
               <table>
-                <thead><tr><th>Service</th><th>Status</th></tr></thead>
+                <thead><tr><th>Service</th><th>Status</th>{staff && <th />}</tr></thead>
                 <tbody>
                   {services.rows.slice((spage - 1) * PAGE_SIZE, spage * PAGE_SIZE).map((s) => (
-                    <tr key={s.name}><td>{s.display}</td><td><span className={`pill ${s.running ? "ok" : "bad"}`}>{s.running ? "Running" : "Stopped"}</span></td></tr>
+                    <tr key={s.name}>
+                      <td>{s.display}</td>
+                      <td><span className={`pill ${s.running ? "ok" : "bad"}`}>{s.running ? "Running" : "Stopped"}</span></td>
+                      {staff && (
+                        <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                          {(() => {
+                            const rq = restarts.get(s.name);
+                            if (rq && (rq.status === "pending" || rq.status === "running")) return <span className="muted small" title={rq.message}>{rq.status === "running" ? "Working…" : "Requested…"}</span>;
+                            return (
+                              <>
+                                {rq && <span className={`muted small`} title={rq.message} style={{ marginRight: 8 }}>{rq.status === "done" ? "restarted" : rq.status === "failed" ? `failed: ${rq.message}` : ""}</span>}
+                                {canRestart(s.name) && (
+                                  <form action={requestRestart} style={{ display: "inline" }}>
+                                    <input type="hidden" name="customer" value={customer} /><input type="hidden" name="host" value={host} /><input type="hidden" name="service" value={s.name} />
+                                    <button className="small" type="submit" title={s.running ? "Restart this service on the computer" : "Start this service on the computer"}>{s.running ? "Restart" : "Start"}</button>
+                                  </form>
+                                )}
+                              </>
+                            );
+                          })()}
+                        </td>
+                      )}
+                    </tr>
                   ))}
                 </tbody>
               </table>

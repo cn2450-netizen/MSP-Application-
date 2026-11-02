@@ -29,3 +29,23 @@ from(bucket: "cust_${slug}") |> range(start: -15m)
     return EMPTY("Services could not be read right now.");
   }
 }
+
+/** Services that are never restarted from the console: the monitoring agent's own service. Everything else can be. */
+const NEVER_RESTART = new Set(["mspagent"]);
+export const canRestart = (name: string) => !NEVER_RESTART.has(name.toLowerCase());
+
+export type Restart = { status: "pending" | "running" | "done" | "failed" | "cancelled"; message: string; at: string };
+
+/** The newest restart request for each service on this computer in the last day, keyed by service name. */
+export async function loadRestarts(slug: string, host: string): Promise<Map<string, Restart>> {
+  const out = new Map<string, Restart>();
+  if (!SLUG.test(slug) || !HOST.test(host)) return out;
+  try {
+    const { q } = await import("./db");
+    const rows = await q<{ service_name: string; status: Restart["status"]; message: string | null; at: string }>(
+      `SELECT DISTINCT ON (service_name) service_name, status, message, COALESCE(finished_at, requested_at) AS at FROM service_restart
+        WHERE customer_slug = $1 AND host = $2 AND requested_at > now() - interval '1 day' ORDER BY service_name, requested_at DESC`, [slug, host]);
+    for (const r of rows) out.set(r.service_name, { status: r.status, message: r.message ?? "", at: r.at });
+  } catch { /* the table arrives with the next portal start */ }
+  return out;
+}
