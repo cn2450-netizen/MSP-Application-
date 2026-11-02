@@ -131,6 +131,7 @@ nav.side a .ext { margin-left: auto; opacity: .55; font-size: 12px; }
 .gauges { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 12px; }
 @media (max-width: 760px) { .gauges { grid-template-columns: 1fr; } }
 .gauges .panel { margin-bottom: 0; }
+.gauges .panel > h3 .btn { font-size: inherit; line-height: 1; padding: 2px 8px; vertical-align: middle; }
 .gauge-body { display: flex; justify-content: center; }
 
 /* ---- encryption gauges on the computer page: one per drive, green at 100 % ---- */

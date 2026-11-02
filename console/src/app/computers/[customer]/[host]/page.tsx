@@ -88,7 +88,10 @@ export default async function ComputerPage({ params, searchParams }: { params: P
         <div className="panel"><h3>Processor use</h3><div className="body"><LineChart title="Processor use" series={perf.cpu.map((s) => ({ ...s, label: "" }))} from={from} to={to} gapMs={gapMs} /></div></div>
         <div className="panel"><h3>Memory use</h3><div className="body"><LineChart title="Memory use" series={perf.memory.map((s) => ({ ...s, label: "" }))} from={from} to={to} gapMs={gapMs} /></div></div>
       </div>
-      <div className="panel"><h3>Disk space used</h3><div className="body"><LineChart title="Disk space used" series={perf.disk} from={from} to={to} gapMs={gapMs} /></div></div>
+      <div className="grid2">
+        <div className="panel"><h3>Disk space used</h3><div className="body"><LineChart title="Disk space used" series={perf.disk} from={from} to={to} gapMs={gapMs} /></div></div>
+        <div className="panel"><h3>Network traffic</h3><div className="body"><LineChart title="Network traffic" unit="Mbps" series={perf.network} from={from} to={to} gapMs={gapMs} /></div></div>
+      </div>
 
       <div className="grid2">
         <div className="panel" id="services">

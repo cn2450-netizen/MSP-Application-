@@ -1,7 +1,10 @@
 import type { Series } from "@/lib/metrics";
 
 const COLORS = ["var(--brand)", "var(--ok)", "var(--warn)", "#b877d9", "var(--bad)"];
-const W = 640, H = 190, L = 38, R = 10, T = 8, B = 24;
+const W = 640, H = 190, L = 44, R = 10, T = 8, B = 24;
+
+/** Rounds up to 1, 2, 5, 10, 20, 50 ... so the gridlines land on round numbers. */
+const niceCeil = (v: number) => { if (v <= 1) return 1; const p = 10 ** Math.floor(Math.log10(v)); return ([1, 2, 5, 10].find((m) => m * p >= v) ?? 10) * p; };
 
 const clock = (t: number, spanMs: number) => {
   const d = new Date(t);
@@ -12,9 +15,13 @@ const clock = (t: number, spanMs: number) => {
 
 // A line chart drawn as plain SVG on the server: no chart library, no script. The vertical scale is 0-100 % for every
 // chart so they can be compared at a glance. A gap in the data (computer off) breaks the line instead of joining across it.
-export default function LineChart({ series, from, to, gapMs, title }: { series: Series[]; from: number; to: number; gapMs: number; title: string }) {
+// unit "%" (default): fixed 0-100 scale. Any other unit ("Mbps"): the scale grows to fit the data.
+export default function LineChart({ series, from, to, gapMs, title, unit = "%" }: { series: Series[]; from: number; to: number; gapMs: number; title: string; unit?: string }) {
+  const peak = Math.max(0, ...series.flatMap((s) => s.points.map((p) => p.v)));
+  const top = unit === "%" ? 100 : niceCeil(peak);
+  const fmt = (v: number) => unit === "%" ? `${Math.round(v)}%` : `${v >= 100 ? Math.round(v) : v >= 10 ? v.toFixed(1) : v.toFixed(2)} ${unit}`;
   const x = (t: number) => L + ((t - from) / (to - from)) * (W - L - R);
-  const y = (v: number) => T + (1 - Math.max(0, Math.min(100, v)) / 100) * (H - T - B);
+  const y = (v: number) => T + (1 - Math.max(0, Math.min(top, v)) / top) * (H - T - B);
   const paths = series.map((s) => {
     let d = "", prev: number | null = null;
     for (const p of s.points) {
@@ -32,10 +39,10 @@ export default function LineChart({ series, from, to, gapMs, title }: { series: 
   return (
     <div className="chart">
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label={title}>
-        {[0, 25, 50, 75, 100].map((g) => (
+        {[0, 0.25, 0.5, 0.75, 1].map((f) => f * top).map((g) => (
           <g key={g}>
             <line x1={L} x2={W - R} y1={y(g)} y2={y(g)} stroke="var(--line)" strokeWidth="1" />
-            <text x={L - 6} y={y(g) + 4} textAnchor="end" fontSize="11" fill="var(--muted)">{g}%</text>
+            <text x={L - 6} y={y(g) + 4} textAnchor="end" fontSize="11" fill="var(--muted)">{unit === "%" ? `${g}%` : g >= 10 ? Math.round(g) : +g.toFixed(1)}</text>
           </g>
         ))}
         {[0, 0.5, 1].map((f) => (
@@ -53,7 +60,7 @@ export default function LineChart({ series, from, to, gapMs, title }: { series: 
             <li key={s.label || title}>
               <i style={{ background: COLORS[i % COLORS.length] }} />
               {s.label && <span>{s.label}</span>}
-              {st && <span className="muted small">now <strong>{Math.round(st.now)}%</strong> · average {Math.round(st.avg)}% · highest {Math.round(st.max)}%</span>}
+              {st && <span className="muted small">now <strong>{fmt(st.now)}</strong> · average {fmt(st.avg)} · highest {fmt(st.max)}</span>}
             </li>
           );
         })}
