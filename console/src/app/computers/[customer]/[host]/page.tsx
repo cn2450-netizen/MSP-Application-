@@ -40,6 +40,13 @@ export default async function ComputerPage({ params, searchParams }: { params: P
   const backupFresh = backupAge === null ? null : Math.max(0, Math.min(100, 100 - ((backupAge - 1) / 6) * 100));
   const to = Date.now(), from = to - RANGES[range].ms, gapMs = RANGES[range].ms / 40;
 
+  const drivePanel = (d: (typeof r.drives)[number]) => (
+    <div className="panel" key={d.volume}>
+      <h3>{staff && classic ? <a className="btn small" href={`${classic}/encryption?customer=${customer}&host=${host}&volume=${d.volume}`} title="Manage encryption and keys">Drive {d.volume}: encryption</a> : <>Drive {d.volume}: encryption</>} <span className="muted small">· {d.key_saved ? "key saved" : "no key saved"}</span></h3>
+      <div className="body gauge-body"><Gauge percent={d.percent} label={`Drive ${d.volume} encryption`} caption={d.state.label} goodHigh /></div>
+    </div>
+  );
+
   return (
     <>
       <p className="small"><a href="/computers">← Computers</a></p>
@@ -63,12 +70,9 @@ export default async function ComputerPage({ params, searchParams }: { params: P
         ))}
       </div>
       <div className="gauges">
-        {r.drives.length === 0 ? <div className="panel"><h3>Drive encryption</h3><div className="body muted">The monitoring agent has not reported any drives.</div></div> : r.drives.map((d) => (
-          <div className="panel" key={d.volume}>
-            <h3>{staff && classic ? <a className="btn small" href={`${classic}/encryption?customer=${customer}&host=${host}&volume=${d.volume}`} title="Manage encryption and keys">Drive {d.volume}: encryption</a> : <>Drive {d.volume}: encryption</>} <span className="muted small">· {d.key_saved ? "key saved" : "no key saved"}</span></h3>
-            <div className="body gauge-body"><Gauge percent={d.percent} label={`Drive ${d.volume} encryption`} caption={d.state.label} goodHigh /></div>
-          </div>
-        ))}
+        {r.drives.length === 0 ? <div className="panel"><h3>Drive encryption</h3><div className="body muted">The monitoring agent has not reported any drives.</div></div> : drivePanel(r.drives[0])}
+        <div className="panel"><h3>Services running</h3><div className="body gauge-body"><Gauge percent={services.total ? (services.running / services.total) * 100 : null} label="Automatic services running" caption={services.total ? `${services.running} of ${services.total} running` : "no data"} goodHigh /></div></div>
+        <div className="panel"><h3>Updates installed OK</h3><div className="body gauge-body"><Gauge percent={patches.health} label="Update installs that succeeded" caption={patches.compliance.label} goodHigh /></div></div>
       </div>
 
       <div className="gauges">
@@ -76,8 +80,7 @@ export default async function ComputerPage({ params, searchParams }: { params: P
           <h3>{r.m && classic ? <a className="btn small" href={`${classic}/machines/${r.m.id}`} title="Browse, restore and schedule">Backup</a> : <>Backup</>} {r.m && <span className="muted small">· {r.backup!.label}</span>}</h3>
           <div className="body gauge-body"><Gauge percent={backupFresh} label="Backup freshness" caption={r.m ? (r.m.last_success ? `last good ${ago(r.m.last_success)}` : "no good backup yet") : "not set up"} goodHigh /></div>
         </div>
-        <div className="panel"><h3>Services running</h3><div className="body gauge-body"><Gauge percent={services.total ? (services.running / services.total) * 100 : null} label="Automatic services running" caption={services.total ? `${services.running} of ${services.total} running` : "no data"} goodHigh /></div></div>
-        <div className="panel"><h3>Updates installed OK</h3><div className="body gauge-body"><Gauge percent={patches.health} label="Update installs that succeeded" caption={patches.compliance.label} goodHigh /></div></div>
+        {r.drives.slice(1).map(drivePanel)}
       </div>
 
       <h2 style={{ margin: "18px 0 10px" }}>History</h2>
