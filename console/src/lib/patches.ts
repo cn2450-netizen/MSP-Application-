@@ -16,17 +16,8 @@ export const PATCH_FAIL_DAYS = 30;
 
 const none = (error: string | null, label = "No patch data"): Patches => ({ rows: [], lastInstall: null, failed: 0, health: null, compliance: { key: "none", label, detail: error ?? "The monitoring agent has not reported any update history." }, error });
 
-export async function loadPatches(slug: string, host: string): Promise<Patches> {
-  if (!SLUG.test(slug) || !HOST.test(host)) return none("invalid computer");
-  try {
-    const rows = await fluxRows(`import "strings"
-from(bucket: "cust_${slug}") |> range(start: -90d)
-  |> filter(fn: (r) => r._measurement == "patch_history" and r._field == "title" and strings.toLower(v: r.host) == "${host}")
-  |> group(columns: ["kb", "result", "operation", "date", "source"]) |> last() |> group()
-  |> sort(columns: ["date"], desc: true) |> keep(columns: ["date", "kb", "result", "operation", "_value"]) |> limit(n: 200)`);
-    const list: Patch[] = rows.map((r) => ({ date: r.date || "unknown", kb: r.kb && r.kb !== "none" ? r.kb : "", title: r._value || "", result: r.result || "Unknown", operation: r.operation || "Other" }));
-    if (list.length === 0) return none(null);
-
+/** The same verdict everywhere: from one computer's update history to its compliance state and gauge value. */
+export function assessPatches(list: Patch[]): { lastInstall: string | null; failed: number; health: number | null; compliance: Compliance } {
     const day = 86_400_000, now = Date.now();
     const ms = (d: string) => (/^\d{4}-\d{2}-\d{2}$/.test(d) ? Date.parse(d) : NaN);
     const installs = list.filter((p) => p.operation === "Install" && (p.result === "Succeeded" || p.result === "SucceededWithErrors") && Number.isFinite(ms(p.date)));
@@ -44,7 +35,24 @@ from(bucket: "cust_${slug}") |> range(start: -90d)
     // gauge: share of install attempts in the last 90 days that worked
     const tried = list.filter((p) => p.operation === "Install" && p.result !== "InProgress");
     const health = tried.length ? (tried.filter((p) => p.result === "Succeeded" || p.result === "SucceededWithErrors").length / tried.length) * 100 : null;
-    return { rows: list, lastInstall, failed, health, compliance, error: null };
+    return { lastInstall, failed, health, compliance };
+}
+
+/** Flux rows from the patch_history query into Patch objects. */
+export const toPatch = (r: Record<string, string>): Patch => ({ date: r.date || "unknown", kb: r.kb && r.kb !== "none" ? r.kb : "", title: r._value || "", result: r.result || "Unknown", operation: r.operation || "Other" });
+
+export async function loadPatches(slug: string, host: string): Promise<Patches> {
+  if (!SLUG.test(slug) || !HOST.test(host)) return none("invalid computer");
+  try {
+    const rows = await fluxRows(`import "strings"
+from(bucket: "cust_${slug}") |> range(start: -90d)
+  |> filter(fn: (r) => r._measurement == "patch_history" and r._field == "title" and strings.toLower(v: r.host) == "${host}")
+  |> group(columns: ["kb", "result", "operation", "date", "source"]) |> last() |> group()
+  |> sort(columns: ["date"], desc: true) |> keep(columns: ["date", "kb", "result", "operation", "_value"]) |> limit(n: 200)`);
+    const list: Patch[] = rows.map(toPatch);
+    if (list.length === 0) return none(null);
+
+    return { rows: list, ...assessPatches(list), error: null };
   } catch {
     return none("Update history could not be read right now.", "Unknown");
   }

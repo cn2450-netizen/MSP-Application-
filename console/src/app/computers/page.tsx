@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { getScope } from "@/lib/session";
 import { getView } from "@/lib/view";
-import { ago, bytes, when } from "@/lib/format";
+import { ago, when } from "@/lib/format";
+import { loadHealth, type Light } from "@/lib/health";
 import { backupNeedsLook, fullyEncrypted, keyMissing, loadFleet, notFullyEncrypted } from "@/lib/fleet";
 import Filters from "../Filters";
 import Pager, { PAGE_SIZE, pageOf } from "../Pager";
@@ -19,6 +20,11 @@ const STATUS_OPTIONS = [
   { value: "attention", label: "Backup needs a look" },
 ];
 
+const WORD = { ok: "good", warn: "needs a look", bad: "needs action", none: "no data" } as const;
+const Lamp = ({ light, what }: { light: Light; what: string }) => (
+  <td className="light-c"><span className={`lamp ${light.level}`} title={light.tip} role="img" aria-label={`${what}: ${WORD[light.level]}. ${light.tip}`} /></td>
+);
+
 export default async function Computers({ searchParams }: { searchParams: Promise<{ enc?: string; status?: string; page?: string }> }) {
   const scope = await getScope();
   if (!scope) redirect("/login");
@@ -32,11 +38,12 @@ export default async function Computers({ searchParams }: { searchParams: Promis
   const multi = !view.customer && (scope.admin || view.customers.length > 1);
   const page = pageOf(sp.page, shown.length);
   const pageRows = shown.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const lights = await loadHealth(pageRows);
 
   return (
     <>
       <h1>Computers</h1>
-      <p className="sub">Every computer you look after: whether it is online, how its drives are encrypted, and its backup.</p>
+      <p className="sub">Every computer you look after, at a glance. Green is fine, yellow needs a look, red needs action, grey means no data. Open a computer for the details.</p>
       {failed.length > 0 && <div className="banner warn">Could not read monitoring data for: {failed.join(", ")}.</div>}
       <Filters action="/computers" fields={[
         { name: "status", label: "Status", value: sp.status ?? "", options: STATUS_OPTIONS },
@@ -48,7 +55,7 @@ export default async function Computers({ searchParams }: { searchParams: Promis
         <div className="scroll">
           {shown.length === 0 ? <div className="body muted">{rows.length === 0 ? "No computers have reported yet." : "No computers match these filters."}</div> : (
             <table>
-              <thead><tr><th>Computer</th>{multi && <th>Company</th>}<th>Encryption</th><th>Backup</th><th>Last good backup</th><th>Size</th><th>Last seen</th></tr></thead>
+              <thead><tr><th>Computer</th>{multi && <th>Company</th>}<th className="light-h">Encryption</th><th className="light-h">Backup</th><th className="light-h">Services</th><th className="light-h">Updates</th><th className="light-h">Performance</th><th>Last good backup</th><th>Last seen</th></tr></thead>
               <tbody>
                 {pageRows.map((r) => (
                   <tr key={r.key}>
@@ -58,20 +65,8 @@ export default async function Computers({ searchParams }: { searchParams: Promis
                       {r.site !== "main" && <span className="muted small"> · {r.site}</span>}
                     </td>
                     {multi && <td className="muted">{r.customerName}</td>}
-                    <td>
-                      {r.drives.length === 0 ? <span className="muted">No data</span> : r.drives.map((d) => (
-                        <span key={d.volume} className="drive" title={`${d.label}: ${d.status}${d.key_saved ? ", recovery key saved" : ""}`}>
-                          {d.volume}:
-                          <span className="bar" role="progressbar" aria-valuenow={Math.round(d.percent)} aria-valuemin={0} aria-valuemax={100}>
-                            <div className={d.state.key} style={{ width: `${Math.max(0, Math.min(100, d.percent))}%` }} />
-                          </span>
-                          <span className={`pill ${d.state.key}`}>{d.state.label}</span>
-                        </span>
-                      ))}
-                    </td>
-                    <td>{r.backup ? <span className={`pill ${r.backup.key}`}>{r.backup.label}</span> : <span className="muted">Not backed up</span>}</td>
+                    {(["encryption", "backup", "services", "updates", "performance"] as const).map((k) => <Lamp key={k} light={lights.get(r.key)![k]} what={k} />)}
                     <td className="muted" title={r.m ? when(r.m.last_success) : ""}>{r.m ? ago(r.m.last_success) : ""}</td>
-                    <td className="muted">{r.m?.bytes_processed ? bytes(r.m.bytes_processed) : ""}</td>
                     <td className="muted" title={when(r.lastSeen)}>{ago(r.lastSeen)}</td>
                   </tr>
                 ))}

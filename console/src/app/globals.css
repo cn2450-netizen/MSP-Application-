@@ -138,3 +138,8 @@ nav.side a .ext { margin-left: auto; opacity: .55; font-size: 12px; }
 /* ---- encryption gauges on the computer page: one per drive, green at 100 % ---- */
 .enc-gauges { display: block; }
 .enc-gauge-item { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
+
+/* ---- red / yellow / green lights on the Computers list ---- */
+.light-h, .light-c { text-align: center; }
+.lamp { display: inline-block; width: 14px; height: 14px; border-radius: 50%; vertical-align: middle; }
+.lamp.ok { background: var(--ok); } .lamp.warn { background: var(--warn); } .lamp.bad { background: var(--bad); } .lamp.none { background: var(--none-bg); border: 1px solid var(--line); box-sizing: border-box; }
