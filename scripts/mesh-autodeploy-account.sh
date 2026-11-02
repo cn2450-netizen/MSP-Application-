@@ -15,7 +15,8 @@ cd "$(dirname "$0")/.."
 set -a; source .env; set +a
 NAME=svc-autodeploy
 FILE=generated/mesh-autodeploy-token
-RIGHTS=131324      # 252 + 131072 (remote commands): RunCommand answers "Access denied" without it
+# meshctrl ignores a numeric --rights (the account ended up with rights 0): the rights have to be named flags
+FLAGS="--managedevices --remotecontrol --agentconsole --serverfiles --wakedevices --notes"
 source scripts/lib/meshcentral.sh
 cmd="${1:-}"
 
@@ -25,7 +26,8 @@ grant() {
     [[ -z "${c:-}" ]] && continue
     gid="$(mesh_group_id "${c} / ${s}")"
     [[ -n "$gid" ]] || { echo "  ${c}/${s}: no device group yet"; continue; }
-    out="$(mc AddUserToDeviceGroup --id "$gid" --userid "user//${NAME}" --rights "$RIGHTS")"
+    mc RemoveUserFromDeviceGroup --id "$gid" --userid "user//${NAME}" >/dev/null 2>&1 || true   # adding an existing member keeps its old rights
+    out="$(mc AddUserToDeviceGroup --id "$gid" --userid "user//${NAME}" $FLAGS)"
     echo "  '${c} / ${s}': ${out}"; n=$((n+1))
   done < generated/sites.tsv
   echo "rights set on ${n} device group(s)"
