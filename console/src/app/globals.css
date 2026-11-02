@@ -128,10 +128,11 @@ nav.side a .ext { margin-left: auto; opacity: .55; font-size: 12px; }
 .chart-legend li { flex-wrap: wrap; }
 
 /* ---- gauges: current value of each measure, history charts below ---- */
-.gauges { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 4px; }
+.gauges { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 12px; }
+@media (max-width: 760px) { .gauges { grid-template-columns: 1fr; } }
 .gauges .panel { margin-bottom: 0; }
 .gauge-body { display: flex; justify-content: center; }
 
 /* ---- encryption gauges on the computer page: one per drive, green at 100 % ---- */
-.enc-gauges { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
-.enc-gauge-item { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 0 1 220px; text-align: center; }
+.enc-gauges { display: block; }
+.enc-gauge-item { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }

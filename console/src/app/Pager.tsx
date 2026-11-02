@@ -9,17 +9,17 @@ export function pageOf(raw: string | undefined, total: number, size = PAGE_SIZE)
 
 // "Showing 1-15 of 22" on the left, page buttons on the right. Plain links, so it works without script and the URL is shareable.
 // `params` are the other query values (filters) to keep when the page changes.
-export default function Pager({ total, page, path, params = {}, size = PAGE_SIZE }: {
-  total: number; page: number; path: string; params?: Record<string, string | undefined>; size?: number;
+export default function Pager({ total, page, path, params = {}, size = PAGE_SIZE, pageKey = "page", hash }: {
+  total: number; page: number; path: string; pageKey?: string; hash?: string; params?: Record<string, string | undefined>; size?: number;
 }) {
   const last = Math.max(1, Math.ceil(total / size));
   if (total <= size) return null;
   const href = (p: number) => {
     const u = new URLSearchParams();
     for (const [k, v] of Object.entries(params)) if (v) u.set(k, v);
-    if (p > 1) u.set("page", String(p));
+    if (p > 1) u.set(pageKey, String(p));
     const qs = u.toString();
-    return qs ? `${path}?${qs}` : path;
+    return (qs ? `${path}?${qs}` : path) + (hash ? `#${hash}` : "");
   };
   // 1 … 4 5 [6] 7 8 … 20
   const pages: (number | "gap")[] = [];

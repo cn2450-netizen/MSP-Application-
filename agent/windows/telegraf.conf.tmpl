@@ -61,12 +61,11 @@
 
 [[inputs.net]]
 
-# Critical services. Extend per customer (SQL, AD, backup agents, AV, ...).
+# Every Windows service (state + start type). The console lists the automatic-start ones and calls out any that are stopped.
+# Every 2 minutes: a full service list is a few hundred points per computer, not worth the default 10 s.
 [[inputs.win_services]]
-  service_names = [
-    "EventLog", "Winmgmt", "RpcSs", "Schedule", "W32Time", "Dnscache",
-    "LanmanServer", "LanmanWorkstation", "MpsSvc", "WinDefend", "wuauserv", "BITS",
-  ]
+  interval = "120s"
+  service_names = []
 
 # BitLocker (protection status, encryption %, locked) - see bitlocker.ps1.
 # Array syntax (the string form is deprecated since Telegraf 1.39 and removed in 1.45). Forward slashes only.

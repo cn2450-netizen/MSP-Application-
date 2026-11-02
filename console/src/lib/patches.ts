@@ -5,7 +5,7 @@ import { fluxRows } from "./influx";
 
 export type Patch = { date: string; kb: string; title: string; result: string; operation: string };
 export type Compliance = { key: "ok" | "warn" | "bad" | "none"; label: string; detail: string };
-export type Patches = { rows: Patch[]; lastInstall: string | null; failed: number; compliance: Compliance; error: string | null };
+export type Patches = { rows: Patch[]; lastInstall: string | null; failed: number; health: number | null; compliance: Compliance; error: string | null };
 
 const SLUG = /^[a-z0-9][a-z0-9-]{1,30}$/;
 const HOST = /^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$/;
@@ -14,7 +14,7 @@ const HOST = /^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$/;
 export const PATCH_FRESH_DAYS = 45;
 export const PATCH_FAIL_DAYS = 30;
 
-const none = (error: string | null, label = "No patch data"): Patches => ({ rows: [], lastInstall: null, failed: 0, compliance: { key: "none", label, detail: error ?? "The monitoring agent has not reported any update history." }, error });
+const none = (error: string | null, label = "No patch data"): Patches => ({ rows: [], lastInstall: null, failed: 0, health: null, compliance: { key: "none", label, detail: error ?? "The monitoring agent has not reported any update history." }, error });
 
 export async function loadPatches(slug: string, host: string): Promise<Patches> {
   if (!SLUG.test(slug) || !HOST.test(host)) return none("invalid computer");
@@ -41,7 +41,10 @@ from(bucket: "cust_${slug}") |> range(start: -90d)
     else if (age > PATCH_FRESH_DAYS) compliance = { key: "bad", label: "Out of date", detail: `Last update installed ${age} days ago (limit ${PATCH_FRESH_DAYS}).` };
     else if (failed > 0) compliance = { key: "warn", label: "Updates failing", detail: `${failed} update${failed === 1 ? "" : "s"} failed in the last ${PATCH_FAIL_DAYS} days and ${failed === 1 ? "has" : "have"} not installed since.` };
     else compliance = { key: "ok", label: "Up to date", detail: `Last update installed ${age === 0 ? "today" : `${age} day${age === 1 ? "" : "s"} ago`}; none failing.` };
-    return { rows: list, lastInstall, failed, compliance, error: null };
+    // gauge: share of install attempts in the last 90 days that worked
+    const tried = list.filter((p) => p.operation === "Install" && p.result !== "InProgress");
+    const health = tried.length ? (tried.filter((p) => p.result === "Succeeded" || p.result === "SucceededWithErrors").length / tried.length) * 100 : null;
+    return { rows: list, lastInstall, failed, health, compliance, error: null };
   } catch {
     return none("Update history could not be read right now.", "Unknown");
   }
