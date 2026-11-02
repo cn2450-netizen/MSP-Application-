@@ -7,7 +7,7 @@ export type Logs = { rows: LogEntry[]; truncated: boolean; error: string | null 
 const URL = process.env.LOKI_URL || "http://loki:3100";
 const SLUG = /^[a-z0-9][a-z0-9-]{1,30}$/;
 const HOST = /^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$/;
-export const LOG_DAYS = 30;
+export const LOG_DAYS = 14;
 const LIMIT = 2000;
 
 const LEVELS: Record<string, LogEntry["level"]> = { "1": "Critical", "2": "Error", "3": "Warning" };
@@ -20,9 +20,13 @@ function messageOf(line: string): string {
 }
 
 export async function loadLogs(slug: string, host: string): Promise<Logs> {
+  return load(slug, host, `Channel!="Security"`);
+}
+
+async function load(slug: string, host: string, extra: string): Promise<Logs> {
   if (!SLUG.test(slug) || !HOST.test(host)) return { rows: [], truncated: false, error: "invalid computer" };
   try {
-    const q = new URLSearchParams({ query: `{host=~"(?i)^${host}$"}`, limit: String(LIMIT), direction: "backward", since: `${LOG_DAYS}d` });
+    const q = new URLSearchParams({ query: `{host=~"(?i)^${host}$",${extra}}`, limit: String(LIMIT), direction: "backward", since: `${LOG_DAYS}d` });
     const res = await fetch(`${URL}/loki/api/v1/query_range?${q}`, { headers: { "X-Scope-OrgID": slug }, cache: "no-store", signal: AbortSignal.timeout(8000) });
     if (!res.ok) throw new Error(`Loki answered ${res.status}`);
     const body = await res.json() as { data?: { result?: { stream: Record<string, string>; values: [string, string][] }[] } };

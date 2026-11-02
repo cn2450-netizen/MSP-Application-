@@ -137,6 +137,18 @@ try {
             throw "Telegraf rejected the generated configuration (exit $($check.ExitCode)):`n$($check.Output)"
         }
 
+        # --- 4b. Security log: sign-in auditing on, and a log big enough to hold events while the agent is offline ---
+        # Failures here never stop the install; the agent still reports everything else.
+        try {
+            $isServer = (Get-CimInstance Win32_OperatingSystem).ProductType -ne 1      # 1 = workstation, 2 = domain controller, 3 = server
+            $wantBytes = if ($isServer) { [int64]1GB } else { [int64]256MB }
+            if ((Get-WinEvent -ListLog Security).MaximumSizeInBytes -lt $wantBytes) { [void](Invoke-Native 'wevtutil.exe' @('sl', 'Security', "/ms:$wantBytes")) }
+            # by subcategory GUID so it works on any Windows language: Logon, Logoff, Account Lockout
+            foreach ($g in '{0CCE9215-69AE-11D9-BED3-505054503030}', '{0CCE9216-69AE-11D9-BED3-505054503030}', '{0CCE9217-69AE-11D9-BED3-505054503030}') {
+                [void](Invoke-Native 'auditpol.exe' @('/set', "/subcategory:$g", '/success:enable', '/failure:enable'))
+            }
+        } catch { Write-Warning "Could not set up the Security log: $($_.Exception.Message)" }
+
         # --- 5. Install and start the service ------------------------------------
         Write-Step 'Installing the service...'
         # Flag order matters: global flags (--config, --service-name) go BEFORE 'service'; only the

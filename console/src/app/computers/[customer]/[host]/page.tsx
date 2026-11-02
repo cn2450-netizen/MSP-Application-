@@ -9,6 +9,7 @@ import { RANGES, loadPerformance, rangeKey } from "@/lib/metrics";
 import { loadPatches } from "@/lib/patches";
 import { loadServices } from "@/lib/services";
 import { loadLogs, LOG_DAYS } from "@/lib/logs";
+import { loadSignIns, SIGNIN_DAYS } from "@/lib/signins";
 import Pager, { PAGE_SIZE, pageOf } from "../../../Pager";
 import LineChart from "../../../LineChart";
 import Gauge from "../../../Gauge";
@@ -16,7 +17,7 @@ import Gauge from "../../../Gauge";
 export const dynamic = "force-dynamic";
 
 // One computer: header, then the same facts the list shows, in full. Charts, events and Connect arrive in later steps.
-export default async function ComputerPage({ params, searchParams }: { params: Promise<{ customer: string; host: string }>; searchParams: Promise<{ range?: string; spage?: string; cpage?: string; lpage?: string }> }) {
+export default async function ComputerPage({ params, searchParams }: { params: Promise<{ customer: string; host: string }>; searchParams: Promise<{ range?: string; spage?: string; cpage?: string; lpage?: string; ipage?: string }> }) {
   const scope = await getScope();
   if (!scope) redirect("/login");
   const { customer, host } = await params;
@@ -31,8 +32,8 @@ export default async function ComputerPage({ params, searchParams }: { params: P
   if (!r) notFound();
   const staff = isStaffFor(scope, customer);
   const classic = env.legacyUrl;
-  const [perf, patches, services, logs] = await Promise.all([loadPerformance(customer, host, range), loadPatches(customer, host), loadServices(customer, host), loadLogs(customer, host)]);
-  const spage = pageOf(sp.spage, services.rows.length), cpage = pageOf(sp.cpage, patches.rows.length), lpage = pageOf(sp.lpage, logs.rows.length);
+  const [perf, patches, services, logs, signins] = await Promise.all([loadPerformance(customer, host, range), loadPatches(customer, host), loadServices(customer, host), loadLogs(customer, host), loadSignIns(customer, host)]);
+  const spage = pageOf(sp.spage, services.rows.length), cpage = pageOf(sp.cpage, patches.rows.length), lpage = pageOf(sp.lpage, logs.rows.length), ipage = pageOf(sp.ipage, signins.rows.length);
   const num = (n: number) => (n > 1 ? String(n) : undefined);
   const path = `/computers/${customer}/${host}`;
   const keep = (o: Record<string, string | undefined>) => ({ range: range === "6h" ? undefined : range, ...o });
@@ -114,7 +115,7 @@ export default async function ComputerPage({ params, searchParams }: { params: P
               </table>
             </div>
           )}
-          <Pager total={services.rows.length} page={spage} path={path} pageKey="spage" hash="services" params={keep({ cpage: num(cpage), lpage: num(lpage) })} />
+          <Pager total={services.rows.length} page={spage} path={path} pageKey="spage" hash="services" params={keep({ cpage: num(cpage), lpage: num(lpage), ipage: num(ipage) })} />
         </div>
 
         <div className="panel" id="patching">
@@ -139,8 +140,33 @@ export default async function ComputerPage({ params, searchParams }: { params: P
               </table>
             )}
           </div>
-          <Pager total={patches.rows.length} page={cpage} path={path} pageKey="cpage" hash="patching" params={keep({ spage: num(spage), lpage: num(lpage) })} />
+          <Pager total={patches.rows.length} page={cpage} path={path} pageKey="cpage" hash="patching" params={keep({ spage: num(spage), lpage: num(lpage), ipage: num(ipage) })} />
         </div>
+      </div>
+
+      <div className="panel" id="signins">
+        <h3>Sign-ins (last {SIGNIN_DAYS} days)</h3>
+        <div className="scroll">
+          {signins.rows.length === 0 ? <div className="body muted">{signins.error ?? "No sign-in records yet. The monitoring agent needs the latest update (it starts collecting them once updated)."}</div> : (
+            <table>
+              <thead><tr><th>Time</th><th>What</th><th>User</th><th>How</th><th>From</th><th>Detail</th></tr></thead>
+              <tbody>
+                {signins.rows.slice((ipage - 1) * PAGE_SIZE, ipage * PAGE_SIZE).map((e, i) => (
+                  <tr key={i}>
+                    <td className="muted" style={{ whiteSpace: "nowrap" }}>{new Date(e.t).toLocaleString()}</td>
+                    <td><span className={`pill ${e.what === "Signed in" ? "ok" : e.what === "Signed out" ? "none" : e.what === "Locked out" ? "bad" : "warn"}`}>{e.what}</span></td>
+                    <td>{e.user}</td>
+                    <td className="muted">{e.how}</td>
+                    <td className="muted">{e.from}</td>
+                    <td className="muted small">{e.detail}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+        {signins.truncated && <p className="muted small" style={{ margin: "8px 16px" }}>Showing the newest events only.</p>}
+        <Pager total={signins.rows.length} page={ipage} path={path} pageKey="ipage" hash="signins" params={keep({ spage: num(spage), cpage: num(cpage), lpage: num(lpage) })} />
       </div>
 
       <div className="panel" id="logs">
@@ -164,8 +190,9 @@ export default async function ComputerPage({ params, searchParams }: { params: P
             </table>
           )}
         </div>
+        {env.grafanaUrl && <p className="muted small" style={{ margin: "8px 16px" }}>Older events (kept for a year) are in <a href={`${env.grafanaUrl}/explore`} target="_blank" rel="noreferrer">Grafana</a>: choose this company's logs there to review and export them.</p>}
         {logs.truncated && <p className="muted small" style={{ margin: "8px 16px" }}>Showing the newest {logs.rows.length} events.</p>}
-        <Pager total={logs.rows.length} page={lpage} path={path} pageKey="lpage" hash="logs" params={keep({ spage: num(spage), cpage: num(cpage) })} />
+        <Pager total={logs.rows.length} page={lpage} path={path} pageKey="lpage" hash="logs" params={keep({ spage: num(spage), cpage: num(cpage), ipage: num(ipage) })} />
       </div>
     </>
   );

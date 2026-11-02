@@ -23,5 +23,7 @@ export const env = {
   get publicUrl() { return `https://${plain("CONSOLE_HOST")}`; },
   // The old portal's public address: backup pages that have not moved yet are linked there.
   get legacyUrl() { return process.env.PORTAL_HOST ? `https://${process.env.PORTAL_HOST}` : ""; },
+  // Grafana's address: where older logs can be reviewed and exported (event logs are kept a year there, the console shows 14 days).
+  get grafanaUrl() { return process.env.GRAFANA_HOST ? `https://${process.env.GRAFANA_HOST}` : ""; },
   get meshUrl() { return process.env.MESH_HOST ? `https://${process.env.MESH_HOST}` : ""; },
 };

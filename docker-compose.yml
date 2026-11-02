@@ -305,6 +305,7 @@ services:
       INFLUX_URL: http://influxdb:8086
       INFLUX_TOKEN_FILE: /run/secrets/portal_influx_token
       LOKI_URL: http://loki:3100
+      GRAFANA_HOST: ${GRAFANA_HOST:-}
       NODE_ENV: production
     secrets: [portal_db_password, console_oidc_secret, bitlocker_escrow_key, portal_influx_token]
     ports:
