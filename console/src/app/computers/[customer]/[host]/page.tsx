@@ -64,6 +64,28 @@ export default async function ComputerPage({ params, searchParams }: { params: P
           </div>
         </div>
       </div>
+      <div className="row perf-head">
+        <h2 style={{ margin: 0 }}>Performance</h2>
+        <span className="ranges">
+          {(Object.keys(RANGES) as (keyof typeof RANGES)[]).map((k) => (
+            <a key={k} className={`btn small${k === range ? " on" : ""}`} href={`?range=${k}`} aria-current={k === range ? "true" : undefined}>{RANGES[k].label}</a>
+          ))}
+        </span>
+      </div>
+      {perf.error && <div className="banner warn">{perf.error}</div>}
+      <div className="gauges">
+        <div className="panel"><h3>Processor</h3><div className="body gauge-body"><Gauge percent={perf.now.cpu} label="Processor use" caption="in use now" /></div></div>
+        <div className="panel"><h3>Memory</h3><div className="body gauge-body"><Gauge percent={perf.now.memory} label="Memory use" caption="in use now" /></div></div>
+        {perf.now.disk.map((d) => (
+          <div className="panel" key={d.name}><h3>Disk {d.name}</h3><div className="body gauge-body"><Gauge percent={d.v} label={`Disk ${d.name} used`} caption="space used" /></div></div>
+        ))}
+      </div>
+      <h2 style={{ margin: "18px 0 10px" }}>History</h2>
+      <div className="grid2">
+        <div className="panel"><h3>Processor use</h3><div className="body"><LineChart title="Processor use" series={perf.cpu.length ? perf.cpu.map((s) => ({ ...s, label: "" })) : []} from={from} to={to} gapMs={gapMs} /></div></div>
+        <div className="panel"><h3>Memory use</h3><div className="body"><LineChart title="Memory use" series={perf.memory.map((s) => ({ ...s, label: "" }))} from={from} to={to} gapMs={gapMs} /></div></div>
+      </div>
+      <div className="panel"><h3>Disk space used</h3><div className="body"><LineChart title="Disk space used" series={perf.disk} from={from} to={to} gapMs={gapMs} /></div></div>
       <h2 style={{ margin: "18px 0 10px" }}>Patching</h2>
       <div className="panel">
         <h3>Compliance</h3>
@@ -95,28 +117,6 @@ export default async function ComputerPage({ params, searchParams }: { params: P
         </div>
         {patches.rows.length > 50 && <p className="muted small" style={{ margin: "8px 16px" }}>Showing the newest 50 of {patches.rows.length}.</p>}
       </div>
-      <div className="row perf-head">
-        <h2 style={{ margin: 0 }}>Performance</h2>
-        <span className="ranges">
-          {(Object.keys(RANGES) as (keyof typeof RANGES)[]).map((k) => (
-            <a key={k} className={`btn small${k === range ? " on" : ""}`} href={`?range=${k}`} aria-current={k === range ? "true" : undefined}>{RANGES[k].label}</a>
-          ))}
-        </span>
-      </div>
-      {perf.error && <div className="banner warn">{perf.error}</div>}
-      <div className="gauges">
-        <div className="panel"><h3>Processor</h3><div className="body gauge-body"><Gauge percent={perf.now.cpu} label="Processor use" caption="in use now" /></div></div>
-        <div className="panel"><h3>Memory</h3><div className="body gauge-body"><Gauge percent={perf.now.memory} label="Memory use" caption="in use now" /></div></div>
-        {perf.now.disk.map((d) => (
-          <div className="panel" key={d.name}><h3>Disk {d.name}</h3><div className="body gauge-body"><Gauge percent={d.v} label={`Disk ${d.name} used`} caption="space used" /></div></div>
-        ))}
-      </div>
-      <h2 style={{ margin: "18px 0 10px" }}>History</h2>
-      <div className="grid2">
-        <div className="panel"><h3>Processor use</h3><div className="body"><LineChart title="Processor use" series={perf.cpu.length ? perf.cpu.map((s) => ({ ...s, label: "" })) : []} from={from} to={to} gapMs={gapMs} /></div></div>
-        <div className="panel"><h3>Memory use</h3><div className="body"><LineChart title="Memory use" series={perf.memory.map((s) => ({ ...s, label: "" }))} from={from} to={to} gapMs={gapMs} /></div></div>
-      </div>
-      <div className="panel"><h3>Disk space used</h3><div className="body"><LineChart title="Disk space used" series={perf.disk} from={from} to={to} gapMs={gapMs} /></div></div>
     </>
   );
 }
