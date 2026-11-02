@@ -42,7 +42,7 @@ export default function LineChart({ series, from, to, gapMs, title, unit = "%" }
         {[0, 0.25, 0.5, 0.75, 1].map((f) => f * top).map((g) => (
           <g key={g}>
             <line x1={L} x2={W - R} y1={y(g)} y2={y(g)} stroke="var(--line)" strokeWidth="1" />
-            <text x={L - 6} y={y(g) + 4} textAnchor="end" fontSize="11" fill="var(--muted)">{unit === "%" ? `${g}%` : g >= 10 ? Math.round(g) : +g.toFixed(1)}</text>
+            <text x={L - 6} y={y(g) + 4} textAnchor="end" fontSize="11" fill="var(--muted)">{unit === "%" ? `${g}%` : g >= 10 ? Math.round(g) : +g.toFixed(2)}</text>
           </g>
         ))}
         {[0, 0.5, 1].map((f) => (
