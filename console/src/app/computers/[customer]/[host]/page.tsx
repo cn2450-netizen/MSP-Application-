@@ -35,6 +35,9 @@ export default async function ComputerPage({ params, searchParams }: { params: P
   const path = `/computers/${customer}/${host}`;
   const keep = (o: Record<string, string | undefined>) => ({ range: range === "6h" ? undefined : range, ...o });
   const stopped = services.total - services.running;
+  // backup gauge: full at a backup within a day, falling to empty at a week old
+  const backupAge = r.m?.last_success ? (Date.now() - new Date(r.m.last_success).getTime()) / 86_400_000 : null;
+  const backupFresh = backupAge === null ? null : Math.max(0, Math.min(100, 100 - ((backupAge - 1) / 6) * 100));
   const to = Date.now(), from = to - RANGES[range].ms, gapMs = RANGES[range].ms / 40;
 
   return (
@@ -46,12 +49,11 @@ export default async function ComputerPage({ params, searchParams }: { params: P
       <div className="gauges">
         {r.drives.length === 0 ? <div className="panel"><h3>Drive encryption</h3><div className="body muted">The monitoring agent has not reported any drives.</div></div> : r.drives.map((d) => (
           <div className="panel" key={d.volume}>
-            <h3>Drive {d.volume}: encryption <span className="muted small">· {d.key_saved ? "key saved" : "no key saved"}</span></h3>
+            <h3>{staff && classic ? <a className="btn small" href={`${classic}/encryption?customer=${customer}&host=${host}&volume=${d.volume}`} title="Manage encryption and keys">Drive {d.volume}: encryption</a> : <>Drive {d.volume}: encryption</>} <span className="muted small">· {d.key_saved ? "key saved" : "no key saved"}</span></h3>
             <div className="body gauge-body"><Gauge percent={d.percent} label={`Drive ${d.volume} encryption`} caption={d.state.label} goodHigh /></div>
           </div>
         ))}
       </div>
-      {staff && r.drives.length > 0 && classic && <p><a className="btn small" href={`${classic}/encryption?customer=${customer}&host=${host}&volume=${r.drives[0].volume}`}>Manage encryption and keys</a></p>}
 
       <div className="row perf-head">
         <h2 style={{ margin: 0 }}>Performance</h2>
@@ -72,19 +74,9 @@ export default async function ComputerPage({ params, searchParams }: { params: P
       <div className="gauges">
         <div className="panel"><h3>Services running</h3><div className="body gauge-body"><Gauge percent={services.total ? (services.running / services.total) * 100 : null} label="Automatic services running" caption={services.total ? `${services.running} of ${services.total} running` : "no data"} goodHigh /></div></div>
         <div className="panel"><h3>Updates installed OK</h3><div className="body gauge-body"><Gauge percent={patches.health} label="Update installs that succeeded" caption={patches.compliance.label} goodHigh /></div></div>
-      </div>
-
-      <div className="panel">
-        <h3>Backup</h3>
-        <div className="body">
-          {r.m ? (
-            <>
-              <p><span className={`pill ${r.backup!.key}`}>{r.backup!.label}</span></p>
-              <div className="kv"><span className="muted">Last good backup</span><span title={when(r.m.last_success)}>{ago(r.m.last_success)}</span></div>
-              <div className="kv"><span className="muted">Data protected</span><span>{r.m.bytes_processed ? bytes(r.m.bytes_processed) : "none yet"}</span></div>
-              {classic && <p><a className="btn small" href={`${classic}/machines/${r.m.id}`}>Browse, restore and schedule</a></p>}
-            </>
-          ) : <span className="muted">This computer is not set up for backup.</span>}
+        <div className="panel">
+          <h3>{r.m && classic ? <a className="btn small" href={`${classic}/machines/${r.m.id}`} title="Browse, restore and schedule">Backup</a> : <>Backup</>} {r.m && <span className="muted small">· {r.backup!.label}</span>}</h3>
+          <div className="body gauge-body"><Gauge percent={backupFresh} label="Backup freshness" caption={r.m ? (r.m.last_success ? `last good ${ago(r.m.last_success)}` : "no good backup yet") : "not set up"} goodHigh /></div>
         </div>
       </div>
 
