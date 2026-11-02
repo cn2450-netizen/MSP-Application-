@@ -30,7 +30,7 @@ schema_config:
         period: 24h
 
 limits_config:
-  retention_period: 744h          # 31 days default; override per tenant later
+  retention_period: 8760h         # 1 year for every company (event logs incl. sign-ins); override per tenant later
   ingestion_rate_mb: 4
   ingestion_burst_size_mb: 8
   max_streams_per_user: 5000
