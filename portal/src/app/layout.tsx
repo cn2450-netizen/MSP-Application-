@@ -18,7 +18,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <div className="shell">
             <aside>
               <a className="brand" href="/">MSP Portal</a>
-              <Nav />
+              <Nav consoleUrl={process.env.CONSOLE_HOST ? `https://${process.env.CONSOLE_HOST}` : undefined} />
             </aside>
             <div className="col">
               <header className="top">

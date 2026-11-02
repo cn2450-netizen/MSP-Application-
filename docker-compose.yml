@@ -258,6 +258,7 @@ services:
       - /app/.next/cache
     environment:
       PORTAL_HOST: ${PORTAL_HOST}
+      CONSOLE_HOST: ${CONSOLE_HOST:-}
       AUTH_HOST: ${AUTH_HOST}
       PORTAL_DB_HOST: postgres
       PORTAL_ALLOW_SELF_APPROVE: ${PORTAL_ALLOW_SELF_APPROVE:-0}
