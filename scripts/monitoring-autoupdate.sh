@@ -53,7 +53,7 @@ from(bucket: "cust_${c}") |> range(start: -7d)
   |> last() |> keep(columns: ["host"]) |> group()
 FLUX
 )"
-  revs="$(influx <<FLUX | awk -F, '{print tolower($4) "\t" $5}'
+  revs="$(influx <<FLUX | awk -F, '{print tolower($5) "\t" $4}'
 from(bucket: "cust_${c}") |> range(start: -30d)
   |> filter(fn: (r) => r._measurement == "agent_info" and r._field == "rev")
   |> group(columns: ["host"]) |> last() |> keep(columns: ["host", "_value"]) |> group()
