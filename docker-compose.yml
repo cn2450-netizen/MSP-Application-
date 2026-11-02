@@ -304,6 +304,7 @@ services:
       BITLOCKER_KEY_FILE: /run/secrets/bitlocker_escrow_key
       INFLUX_URL: http://influxdb:8086
       INFLUX_TOKEN_FILE: /run/secrets/portal_influx_token
+      LOKI_URL: http://loki:3100
       NODE_ENV: production
     secrets: [portal_db_password, console_oidc_secret, bitlocker_escrow_key, portal_influx_token]
     ports:

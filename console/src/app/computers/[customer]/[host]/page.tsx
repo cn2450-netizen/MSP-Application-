@@ -8,6 +8,7 @@ import { loadFleet } from "@/lib/fleet";
 import { RANGES, loadPerformance, rangeKey } from "@/lib/metrics";
 import { loadPatches } from "@/lib/patches";
 import { loadServices } from "@/lib/services";
+import { loadLogs, LOG_DAYS } from "@/lib/logs";
 import Pager, { PAGE_SIZE, pageOf } from "../../../Pager";
 import LineChart from "../../../LineChart";
 import Gauge from "../../../Gauge";
@@ -15,7 +16,7 @@ import Gauge from "../../../Gauge";
 export const dynamic = "force-dynamic";
 
 // One computer: header, then the same facts the list shows, in full. Charts, events and Connect arrive in later steps.
-export default async function ComputerPage({ params, searchParams }: { params: Promise<{ customer: string; host: string }>; searchParams: Promise<{ range?: string; spage?: string; cpage?: string }> }) {
+export default async function ComputerPage({ params, searchParams }: { params: Promise<{ customer: string; host: string }>; searchParams: Promise<{ range?: string; spage?: string; cpage?: string; lpage?: string }> }) {
   const scope = await getScope();
   if (!scope) redirect("/login");
   const { customer, host } = await params;
@@ -30,8 +31,9 @@ export default async function ComputerPage({ params, searchParams }: { params: P
   if (!r) notFound();
   const staff = isStaffFor(scope, customer);
   const classic = env.legacyUrl;
-  const [perf, patches, services] = await Promise.all([loadPerformance(customer, host, range), loadPatches(customer, host), loadServices(customer, host)]);
-  const spage = pageOf(sp.spage, services.rows.length), cpage = pageOf(sp.cpage, patches.rows.length);
+  const [perf, patches, services, logs] = await Promise.all([loadPerformance(customer, host, range), loadPatches(customer, host), loadServices(customer, host), loadLogs(customer, host)]);
+  const spage = pageOf(sp.spage, services.rows.length), cpage = pageOf(sp.cpage, patches.rows.length), lpage = pageOf(sp.lpage, logs.rows.length);
+  const num = (n: number) => (n > 1 ? String(n) : undefined);
   const path = `/computers/${customer}/${host}`;
   const keep = (o: Record<string, string | undefined>) => ({ range: range === "6h" ? undefined : range, ...o });
   const stopped = services.total - services.running;
@@ -112,7 +114,7 @@ export default async function ComputerPage({ params, searchParams }: { params: P
               </table>
             </div>
           )}
-          <Pager total={services.rows.length} page={spage} path={path} pageKey="spage" hash="services" params={keep({ cpage: cpage > 1 ? String(cpage) : undefined })} />
+          <Pager total={services.rows.length} page={spage} path={path} pageKey="spage" hash="services" params={keep({ cpage: num(cpage), lpage: num(lpage) })} />
         </div>
 
         <div className="panel" id="patching">
@@ -137,8 +139,33 @@ export default async function ComputerPage({ params, searchParams }: { params: P
               </table>
             )}
           </div>
-          <Pager total={patches.rows.length} page={cpage} path={path} pageKey="cpage" hash="patching" params={keep({ spage: spage > 1 ? String(spage) : undefined })} />
+          <Pager total={patches.rows.length} page={cpage} path={path} pageKey="cpage" hash="patching" params={keep({ spage: num(spage), lpage: num(lpage) })} />
         </div>
+      </div>
+
+      <div className="panel" id="logs">
+        <h3>Event log warnings and errors (last {LOG_DAYS} days)</h3>
+        <div className="scroll">
+          {logs.rows.length === 0 ? <div className="body muted">{logs.error ?? `No warnings or errors in the last ${LOG_DAYS} days.`}</div> : (
+            <table>
+              <thead><tr><th>Time</th><th>Level</th><th>Log</th><th>Source</th><th>Event</th><th>Message</th></tr></thead>
+              <tbody>
+                {logs.rows.slice((lpage - 1) * PAGE_SIZE, lpage * PAGE_SIZE).map((e, i) => (
+                  <tr key={i}>
+                    <td className="muted" style={{ whiteSpace: "nowrap" }}>{new Date(e.t).toLocaleString()}</td>
+                    <td><span className={`pill ${e.level === "Warning" ? "warn" : e.level === "Other" ? "none" : "bad"}`}>{e.level}</span></td>
+                    <td className="muted">{e.channel}</td>
+                    <td className="muted">{e.source}</td>
+                    <td className="muted">{e.eventId}</td>
+                    <td className="small">{e.message.length > 320 ? e.message.slice(0, 320) + "…" : e.message}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+        {logs.truncated && <p className="muted small" style={{ margin: "8px 16px" }}>Showing the newest {logs.rows.length} events.</p>}
+        <Pager total={logs.rows.length} page={lpage} path={path} pageKey="lpage" hash="logs" params={keep({ spage: num(spage), cpage: num(cpage) })} />
       </div>
     </>
   );
