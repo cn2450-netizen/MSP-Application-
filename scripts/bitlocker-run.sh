@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Run BitLocker management on one PC through MeshCentral and save any recovery keys it reports (encrypted) in the portal.
 #   scripts/bitlocker-run.sh <customer> <computer> <drive-letter> enable|escrow
-# Used by scripts/bitlocker-executor.sh for portal requests; also fine by hand. Needs a MeshCentral login token
-# (scripts/mesh-token.sh set) and the portal database. Prints a one-line outcome; recovery keys are never printed or logged.
+# Used by scripts/bitlocker-executor.sh for portal requests; also fine by hand. Needs the automation account's login
+# (generated/mesh-autodeploy-token) or a MeshCentral login token (scripts/mesh-token.sh set), and the portal database. Prints a one-line outcome; recovery keys are never printed or logged.
 # Exit: 0 ok, 1 the PC reported a problem, 3 not possible right now (computer off / no Mesh token: the worker retries later).
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -22,7 +22,13 @@ keyfile=secrets/bitlocker_escrow_key
 pass="$(cat "$keyfile")"
 [[ "$pass" =~ ^[0-9a-f]+$ ]] || { echo "unexpected characters in $keyfile"; exit 1; }
 
-mesh_login 2>/dev/null || { echo "MeshCentral login token missing or expired: create one (My Account -> Create login token) and run scripts/mesh-token.sh set, then try again"; exit 3; }
+# Signs in as the limited automation account (generated/mesh-autodeploy-token, rights: scripts/mesh-autodeploy-account.sh);
+# a hand-made token (scripts/mesh-token.sh set) is only the fallback when that login is missing or refused.
+if [[ -s generated/mesh-autodeploy-token ]]; then
+  MESH_TOKEN_USER="$(sed -n 1p generated/mesh-autodeploy-token)" MESH_TOKEN_PASS="$(sed -n 2p generated/mesh-autodeploy-token)"
+  export MESH_TOKEN_USER MESH_TOKEN_PASS
+fi
+mesh_login 2>/dev/null || { unset MESH_TOKEN_USER MESH_TOKEN_PASS; mesh_login 2>/dev/null; } || { echo "MeshCentral login missing or expired: scripts/mesh-autodeploy-account.sh status, or create a login token (My Account -> Create login token) and run scripts/mesh-token.sh set, then try again"; exit 3; }
 
 # the device: online, in any of this customer's device groups ("<customer> / <site>"), matched by computer name
 id=""
