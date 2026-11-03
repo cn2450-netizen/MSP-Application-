@@ -73,4 +73,5 @@ while IFS=$'\t' read -r cust site _rest; do
   done
 done < generated/sites.tsv
 echo "auto-deploy done: ${deployed} installed"
+scripts/mesh-power-plan.sh || true      # same cadence, own lock and company list (generated/power-plan-companies.txt)
 exit 0
