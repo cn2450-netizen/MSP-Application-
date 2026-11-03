@@ -41,7 +41,8 @@ mesh_login || { echo "the auto-update token was rejected or expired: make a new 
 target="$(sed -n "s/.*rev=\([0-9][0-9]*\)i.*/\1/p" agent/windows/agentinfo.ps1 | head -1)"
 [[ "$target" =~ ^[0-9]+$ ]] || { echo "cannot read the revision from agent/windows/agentinfo.ps1" >&2; exit 1; }
 
-psql_portal() { docker compose exec -T postgres psql -U portal -d portal -v ON_ERROR_STOP=1 -X -q -A -t -F $'\t' "$@"; }
+# </dev/null: this runs inside "while read ... < sites.tsv"; without it psql swallows the rest of that file and later companies are never visited
+psql_portal() { docker compose exec -T postgres psql -U portal -d portal -v ON_ERROR_STOP=1 -X -q -A -t -F $'\t' "$@" </dev/null; }
 influx() { docker compose exec -T influxdb sh -c 'influx query --org msp --token "$(cat /run/secrets/influx_admin_token)" --raw -f /dev/stdin' 2>/dev/null | awk -F, '{ gsub(/\r/, "") } $1=="" && $2=="" && $3 ~ /^[0-9]+$/'; }
 
 # "host<TAB>revision" for every computer that reports monitoring data (revision 0 when it reports none)
