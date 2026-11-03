@@ -1,6 +1,7 @@
 import { fluxRows } from "./influx";
 import { assessPatches, toPatch, type Patch } from "./patches";
 import type { FleetRow } from "./fleet";
+import { loadIgnored } from "./services";
 
 // One red / yellow / green light per area for each computer in a list, for the quick-glance Computers page. The lights use
 // the same rules as the detail page, but are fetched per company (a handful of queries) rather than per computer.
@@ -22,9 +23,10 @@ type Svc = { total: number; stopped: number };
 async function forCustomer(slug: string) {
   const b = `from(bucket: "cust_${slug}")`;
   const get = (q: string) => fluxRows(q).catch(() => null);
+  const ignored = await loadIgnored(slug);       // the company's "not expected to keep running" services
   const [svc, cpu, mem, disk, patch] = await Promise.all([
     get(`${b} |> range(start: -15m) |> filter(fn: (r) => r._measurement == "win_services" and (r._field == "state" or r._field == "startup_mode")) |> last() |> group()
-      |> pivot(rowKey: ["host", "service_name"], columnKey: ["_field"], valueColumn: "_value") |> filter(fn: (r) => r.startup_mode == 2) |> keep(columns: ["host", "state"])`),
+      |> pivot(rowKey: ["host", "service_name"], columnKey: ["_field"], valueColumn: "_value") |> filter(fn: (r) => r.startup_mode == 2) |> keep(columns: ["host", "service_name", "state"])`),
     get(`${b} |> range(start: -15m) |> filter(fn: (r) => r._measurement == "cpu" and r._field == "usage_idle" and r.cpu == "cpu-total")
       |> map(fn: (r) => ({r with _value: 100.0 - r._value})) |> group(columns: ["host"]) |> mean() |> keep(columns: ["host", "_value"])`),
     get(`${b} |> range(start: -15m) |> filter(fn: (r) => r._measurement == "mem" and r._field == "used_percent") |> group(columns: ["host"]) |> last() |> keep(columns: ["host", "_value"])`),
@@ -38,7 +40,7 @@ async function forCustomer(slug: string) {
   const perf = { cpu: new Map<string, number>(), memory: new Map<string, number>(), disk: new Map<string, number>() };
   num(cpu, perf.cpu); num(mem, perf.memory); num(disk, perf.disk);
   const services = new Map<string, Svc>();
-  for (const r of svc ?? []) { const h = r.host.toLowerCase(), s = services.get(h) ?? services.set(h, { total: 0, stopped: 0 }).get(h)!; s.total++; if (Number(r.state) !== 4) s.stopped++; }
+  for (const r of svc ?? []) { if (ignored.has((r.service_name ?? "").toLowerCase())) continue; const h = r.host.toLowerCase(), s = services.get(h) ?? services.set(h, { total: 0, stopped: 0 }).get(h)!; s.total++; if (Number(r.state) !== 4) s.stopped++; }
   const patches = new Map<string, Patch[]>();
   for (const r of patch ?? []) { const h = r.host.toLowerCase(); (patches.get(h) ?? patches.set(h, []).get(h)!).push(toPatch(r)); }
   return { perf, services, patches };

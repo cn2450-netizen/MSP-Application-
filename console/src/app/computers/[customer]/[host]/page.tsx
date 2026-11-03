@@ -8,7 +8,7 @@ import { loadFleet } from "@/lib/fleet";
 import { RANGES, loadPerformance, rangeKey } from "@/lib/metrics";
 import { loadPatches } from "@/lib/patches";
 import { loadServices, loadRestarts, canRestart } from "@/lib/services";
-import { requestRestart } from "./actions";
+import { requestRestart, setIgnore } from "./actions";
 import { loadStuck } from "@/lib/agentupdate";
 import { loadLogs, LOG_DAYS } from "@/lib/logs";
 import { loadSignIns, SIGNIN_DAYS } from "@/lib/signins";
@@ -105,10 +105,10 @@ export default async function ComputerPage({ params, searchParams }: { params: P
         <div className="panel" id="services">
           <h3>Services (start automatically)</h3>
           <div className="body">
-            {services.error ? <span className="muted">{services.error}</span> : services.total === 0 ? <span className="muted">No service list reported yet. The monitoring agent needs the latest update.</span>
-              : <span className={`pill ${stopped ? "bad" : "ok"}`}>{stopped ? `${stopped} stopped` : "All running"}</span>}
+            {services.error ? <span className="muted">{services.error}</span> : services.rows.length === 0 ? <span className="muted">No service list reported yet. The monitoring agent needs the latest update.</span>
+              : <><span className={`pill ${stopped ? "bad" : "ok"}`}>{stopped ? `${stopped} stopped` : "All running"}</span>{services.rows.some((s) => s.ignored) && <span className="muted small" style={{ marginLeft: 8 }}>Ignored services are listed last and are not counted.</span>}</>}
           </div>
-          {services.total > 0 && (
+          {services.rows.length > 0 && (
             <div className="scroll">
               <table>
                 <thead><tr><th>Service</th><th>Status</th>{staff && <th />}</tr></thead>
@@ -116,9 +116,13 @@ export default async function ComputerPage({ params, searchParams }: { params: P
                   {services.rows.slice((spage - 1) * PAGE_SIZE, spage * PAGE_SIZE).map((s) => (
                     <tr key={s.name}>
                       <td>{s.display}</td>
-                      <td><span className={`pill ${s.running ? "ok" : "bad"}`}>{s.running ? "Running" : "Stopped"}</span></td>
+                      <td><span className={`pill ${s.running ? "ok" : s.ignored ? "" : "bad"}`}>{s.running ? "Running" : "Stopped"}</span>{s.ignored && <span className="muted small" style={{ marginLeft: 8 }}>ignored</span>}</td>
                       {staff && (
                         <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                          <form action={setIgnore} style={{ display: "inline", marginRight: 6 }}>
+                            <input type="hidden" name="customer" value={customer} /><input type="hidden" name="host" value={host} /><input type="hidden" name="service" value={s.name} /><input type="hidden" name="mode" value={s.ignored ? "stop" : "add"} />
+                            <button className="small" type="submit" title={s.ignored ? "Count this service again, on every computer of this company" : "Do not count this service when it is stopped, on every computer of this company"}>{s.ignored ? "Stop ignoring" : "Ignore"}</button>
+                          </form>
                           {(() => {
                             const rq = restarts.get(s.name);
                             if (rq && (rq.status === "pending" || rq.status === "running")) return <span className="muted small" title={rq.message}>{rq.status === "running" ? "Working…" : "Requested…"}</span>;
