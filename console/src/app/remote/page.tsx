@@ -34,7 +34,7 @@ export default async function Remote({ searchParams }: { searchParams: Promise<{
     <>
       <h1>Remote access</h1>
       <p className="sub">
-        Connect opens that computer in MeshCentral (same sign-in as this console). From there use the Desktop, Terminal or Files tabs.
+        Connect opens that computer's remote desktop in MeshCentral (same sign-in as this console); the Terminal and Files tabs are there too.
         {mesh && <> <a href={mesh} target="_blank" rel="noopener noreferrer">Open MeshCentral ↗</a></>}
       </p>
       {!mesh && <div className="banner warn">The remote access address is not configured (MESH_HOST).</div>}
