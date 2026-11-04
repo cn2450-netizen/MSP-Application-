@@ -34,7 +34,7 @@ export default async function Remote({ searchParams }: { searchParams: Promise<{
     <>
       <h1>Remote access</h1>
       <p className="sub">
-        Connect opens a remote desktop session on that computer in MeshCentral (same sign-in as this console). From there you can also open a command prompt or transfer files.
+        Connect opens that computer in MeshCentral (same sign-in as this console). From there use the Desktop, Terminal or Files tabs.
         {mesh && <> <a href={mesh} target="_blank" rel="noopener noreferrer">Open MeshCentral ↗</a></>}
       </p>
       {!mesh && <div className="banner warn">The remote access address is not configured (MESH_HOST).</div>}
@@ -59,7 +59,7 @@ export default async function Remote({ searchParams }: { searchParams: Promise<{
                     <td className="muted" title={when(r.lastSeen)}>{ago(r.lastSeen)}</td>
                     <td>
                       {mesh && isStaffFor(scope, r.slug)
-                        ? <a href={nodes.has(r.key) ? connectUrl(mesh, nodes.get(r.key)!) : mesh} target="_blank" rel="noopener noreferrer" title={nodes.has(r.key) ? `Open a remote session on ${r.name}` : `Open MeshCentral and pick ${r.name}`}>Connect ↗</a>
+                        ? <a href={nodes.has(r.key) ? connectUrl(mesh, nodes.get(r.key)!) : mesh} target="_blank" rel="noopener noreferrer" title={nodes.has(r.key) ? `Open ${r.name} in MeshCentral` : `Open MeshCentral and pick ${r.name}`}>Connect ↗</a>
                         : <span className="muted small">{mesh ? "Technicians only" : ""}</span>}
                     </td>
                   </tr>

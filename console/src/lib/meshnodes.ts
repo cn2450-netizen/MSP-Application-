@@ -10,5 +10,6 @@ export async function loadNodes(): Promise<Map<string, string>> {
   }
 }
 
-// viewmode 11 = remote desktop; MeshCentral signs the technician in first (same single sign-on) and then opens that computer.
-export const connectUrl = (mesh: string, nodeId: string) => `${mesh}/?viewmode=11&gotonode=${encodeURIComponent(nodeId)}`;
+// Opens that computer's normal General page (name, details, then the Desktop/Terminal/Files tabs). Not viewmode=11: jumping straight
+// into the Desktop tab skipped the device header and left the Connect button disabled.
+export const connectUrl = (mesh: string, nodeId: string) => `${mesh}/?gotonode=${encodeURIComponent(nodeId)}`;
