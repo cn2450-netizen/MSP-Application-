@@ -12,6 +12,8 @@ import { requestRestart, setIgnore } from "./actions";
 import { loadStuck } from "@/lib/agentupdate";
 import { loadLogs, LOG_DAYS } from "@/lib/logs";
 import { loadSignIns, SIGNIN_DAYS } from "@/lib/signins";
+import { Suspense } from "react";
+import { LogsPanel, PanelFallback, SignInsPanel } from "./panels";
 import Pager, { PAGE_SIZE, pageOf } from "../../../Pager";
 import LineChart from "../../../LineChart";
 import Gauge from "../../../Gauge";
@@ -28,16 +30,23 @@ export default async function ComputerPage({ params, searchParams }: { params: P
   // A computer you may not see answers 404, the same as one that does not exist.
   if (!/^[a-z0-9][a-z0-9-]{1,30}$/.test(customer) || !/^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$/.test(host) || !canSee(scope, customer)) notFound();
 
-  const view = await getView(scope);
+  // The slow lookups (Loki, 1-2 s each) start now, before anything else is awaited, and are handed to panels inside <Suspense>:
+  // the page shows as soon as the quick ones are in and these fill in after. Both loaders catch their own errors.
+  const signinsP = loadSignIns(customer, host), logsP = loadLogs(customer, host);
+  const staff = isStaffFor(scope, customer);
+  const [view, stuckAll, perf, patches, services, restarts] = await Promise.all([
+    getView(scope), staff ? loadStuck() : Promise.resolve(null),
+    loadPerformance(customer, host, range), loadPatches(customer, host), loadServices(customer, host), loadRestarts(customer, host),
+  ]);
   const { rows } = await loadFleet(scope, { ...view, customer, site: "" });
   const r = rows.find((x) => x.slug === customer && x.host === host);
   if (!r) notFound();
-  const staff = isStaffFor(scope, customer);
-  const stuck = staff ? (await loadStuck()).get(`${customer}|${host}`) : undefined;
+  const stuck = stuckAll?.get(`${customer}|${host}`);
   const classic = env.legacyUrl;
-  const [perf, patches, services, logs, signins] = await Promise.all([loadPerformance(customer, host, range), loadPatches(customer, host), loadServices(customer, host), loadLogs(customer, host), loadSignIns(customer, host)]);
-  const restarts = await loadRestarts(customer, host);
-  const spage = pageOf(sp.spage, services.rows.length), cpage = pageOf(sp.cpage, patches.rows.length), lpage = pageOf(sp.lpage, logs.rows.length), ipage = pageOf(sp.ipage, signins.rows.length);
+  // page numbers of the panels that load later are carried through as typed; each panel clamps its own
+  const raw = (v?: string) => (v && /^[1-9]\d{0,3}$/.test(v) && v !== "1" ? v : undefined);
+  const spage = pageOf(sp.spage, services.rows.length), cpage = pageOf(sp.cpage, patches.rows.length);
+  const lpage = raw(sp.lpage), ipage = raw(sp.ipage);
   const num = (n: number) => (n > 1 ? String(n) : undefined);
   const path = `/computers/${customer}/${host}`;
   const keep = (o: Record<string, string | undefined>) => ({ range: range === "6h" ? undefined : range, ...o });
@@ -146,7 +155,7 @@ export default async function ComputerPage({ params, searchParams }: { params: P
               </table>
             </div>
           )}
-          <Pager total={services.rows.length} page={spage} path={path} pageKey="spage" hash="services" params={keep({ cpage: num(cpage), lpage: num(lpage), ipage: num(ipage) })} />
+          <Pager total={services.rows.length} page={spage} path={path} pageKey="spage" hash="services" params={keep({ cpage: num(cpage), lpage, ipage })} />
         </div>
 
         <div className="panel" id="patching">
@@ -171,60 +180,17 @@ export default async function ComputerPage({ params, searchParams }: { params: P
               </table>
             )}
           </div>
-          <Pager total={patches.rows.length} page={cpage} path={path} pageKey="cpage" hash="patching" params={keep({ spage: num(spage), lpage: num(lpage), ipage: num(ipage) })} />
+          <Pager total={patches.rows.length} page={cpage} path={path} pageKey="cpage" hash="patching" params={keep({ spage: num(spage), lpage, ipage })} />
         </div>
       </div>
 
-      <div className="panel" id="signins">
-        <h3>Sign-ins (last {SIGNIN_DAYS} days)</h3>
-        <div className="scroll">
-          {signins.rows.length === 0 ? <div className="body muted">{signins.error ?? "No sign-in records yet. The monitoring agent needs the latest update (it starts collecting them once updated)."}</div> : (
-            <table>
-              <thead><tr><th>Time</th><th>What</th><th>User</th><th>How</th><th>From</th><th>Detail</th></tr></thead>
-              <tbody>
-                {signins.rows.slice((ipage - 1) * PAGE_SIZE, ipage * PAGE_SIZE).map((e, i) => (
-                  <tr key={i}>
-                    <td className="muted" style={{ whiteSpace: "nowrap" }}>{new Date(e.t).toLocaleString()}</td>
-                    <td><span className={`pill ${e.what === "Signed in" ? "ok" : e.what === "Signed out" ? "none" : e.what === "Locked out" ? "bad" : "warn"}`}>{e.what}</span></td>
-                    <td>{e.user}</td>
-                    <td className="muted">{e.how}</td>
-                    <td className="muted">{e.from}</td>
-                    <td className="muted small">{e.detail}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-        {signins.truncated && <p className="muted small" style={{ margin: "8px 16px" }}>Showing the newest events only.</p>}
-        <Pager total={signins.rows.length} page={ipage} path={path} pageKey="ipage" hash="signins" params={keep({ spage: num(spage), cpage: num(cpage), lpage: num(lpage) })} />
-      </div>
+      <Suspense fallback={<PanelFallback title={`Sign-ins (last ${SIGNIN_DAYS} days)`} />}>
+        <SignInsPanel data={signinsP} page={sp.ipage} path={path} carry={keep({ spage: num(spage), cpage: num(cpage), lpage })} />
+      </Suspense>
 
-      <div className="panel" id="logs">
-        <h3>Event log warnings and errors (last {LOG_DAYS} days)</h3>
-        <div className="scroll">
-          {logs.rows.length === 0 ? <div className="body muted">{logs.error ?? `No warnings or errors in the last ${LOG_DAYS} days.`}</div> : (
-            <table>
-              <thead><tr><th>Time</th><th>Level</th><th>Log</th><th>Source</th><th>Event</th><th>Message</th></tr></thead>
-              <tbody>
-                {logs.rows.slice((lpage - 1) * PAGE_SIZE, lpage * PAGE_SIZE).map((e, i) => (
-                  <tr key={i}>
-                    <td className="muted" style={{ whiteSpace: "nowrap" }}>{new Date(e.t).toLocaleString()}</td>
-                    <td><span className={`pill ${e.level === "Warning" ? "warn" : e.level === "Other" ? "none" : "bad"}`}>{e.level}</span></td>
-                    <td className="muted">{e.channel}</td>
-                    <td className="muted">{e.source}</td>
-                    <td className="muted">{e.eventId}</td>
-                    <td className="small">{e.message.length > 320 ? e.message.slice(0, 320) + "…" : e.message}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-        {env.grafanaUrl && <p className="muted small" style={{ margin: "8px 16px" }}>Older events (kept for a year) are in <a href={`${env.grafanaUrl}/explore`} target="_blank" rel="noreferrer">Grafana</a>: choose this company's logs there to review and export them.</p>}
-        {logs.truncated && <p className="muted small" style={{ margin: "8px 16px" }}>Showing the newest {logs.rows.length} events.</p>}
-        <Pager total={logs.rows.length} page={lpage} path={path} pageKey="lpage" hash="logs" params={keep({ spage: num(spage), cpage: num(cpage), ipage: num(ipage) })} />
-      </div>
+      <Suspense fallback={<PanelFallback title={`Event log warnings and errors (last ${LOG_DAYS} days)`} />}>
+        <LogsPanel data={logsP} page={sp.lpage} path={path} carry={keep({ spage: num(spage), cpage: num(cpage), ipage })} />
+      </Suspense>
     </>
   );
 }

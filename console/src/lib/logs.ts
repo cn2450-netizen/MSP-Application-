@@ -19,8 +19,14 @@ function messageOf(line: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
+// Loki takes 1-2 s per lookup, so a good answer is reused for a minute (reopening a computer or paging is instant).
+const cache = new Map<string, { at: number; v: Logs }>();
 export async function loadLogs(slug: string, host: string): Promise<Logs> {
-  return load(slug, host, `Channel!="Security"`);
+  const key = `${slug}|${host}`, hit = cache.get(key);
+  if (hit && Date.now() - hit.at < 60_000) return hit.v;
+  const v = await load(slug, host, `Channel!="Security"`);
+  if (!v.error) { if (cache.size > 300) cache.clear(); cache.set(key, { at: Date.now(), v }); }
+  return v;
 }
 
 async function load(slug: string, host: string, extra: string): Promise<Logs> {

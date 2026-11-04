@@ -23,7 +23,17 @@ function fields(line: string): Record<string, string> {
   return out;
 }
 
+// Loki takes 1-2 s per lookup, so a good answer is reused for a minute (reopening a computer or paging is instant).
+const cache = new Map<string, { at: number; v: SignIns }>();
 export async function loadSignIns(slug: string, host: string): Promise<SignIns> {
+  const key = `${slug}|${host}`, hit = cache.get(key);
+  if (hit && Date.now() - hit.at < 60_000) return hit.v;
+  const v = await fetchSignIns(slug, host);
+  if (!v.error) { if (cache.size > 300) cache.clear(); cache.set(key, { at: Date.now(), v }); }
+  return v;
+}
+
+async function fetchSignIns(slug: string, host: string): Promise<SignIns> {
   if (!SLUG.test(slug) || !HOST.test(host)) return { rows: [], truncated: false, error: "invalid computer" };
   try {
     const q = new URLSearchParams({ query: `{host=~"(?i)^${host}$",Channel="Security"}`, limit: String(LIMIT), direction: "backward", since: `${SIGNIN_DAYS}d` });
