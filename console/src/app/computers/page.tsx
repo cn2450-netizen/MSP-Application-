@@ -73,9 +73,10 @@ export default async function Computers({ searchParams }: { searchParams: Promis
                     {multi && <td className="muted">{r.customerName}</td>}
                     {mesh && (
                       <td>
-                        {isStaffFor(scope, r.slug)
-                          ? <a href={nodes.has(r.key) ? connectUrl(mesh, nodes.get(r.key)!) : mesh} target="_blank" rel="noopener noreferrer" title={nodes.has(r.key) ? `Open ${r.name} in MeshCentral` : `Open MeshCentral and pick ${r.name}`}>Connect ↗</a>
-                          : null}
+                        {!isStaffFor(scope, r.slug) ? null
+                          : !nodes.has(r.key) ? <a href={mesh} target="_blank" rel="noopener noreferrer" title={`Open MeshCentral and pick ${r.name}`}>Connect ↗</a>
+                          : nodes.get(r.key)!.online ? <a href={connectUrl(mesh, nodes.get(r.key)!.id)} target="_blank" rel="noopener noreferrer" title={`Open ${r.name} in MeshCentral`}>Connect ↗</a>
+                          : <span className="muted" title="The remote agent is not connected, so a session cannot start (computer off, asleep or offline)">Connect</span>}
                       </td>
                     )}
                     {(["encryption", "backup", "services", "updates", "performance"] as const).map((k) => <Lamp key={k} light={lights.get(r.key)![k]} what={k} />)}

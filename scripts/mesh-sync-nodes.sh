@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Copy each computer's MeshCentral id into the portal database (table mesh_node) so the console's Remote access page can
-# open a session straight on that computer. Read-only against MeshCentral; safe to re-run. Called by monitoring-autodeploy.sh.
+# Copy each computer's MeshCentral id and online state (remote agent connected) into the portal database (table mesh_node) so
+# the console's Connect links open that computer and grey out when it is not connected. Read-only against MeshCentral; safe to
+# re-run. Run every minute by the msp-mesh-sync timer (scripts/install-mesh-sync.sh).
 #   scripts/mesh-sync-nodes.sh
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -15,10 +16,10 @@ sql=""
 while IFS=$'\t' read -r cust site _rest; do
   [[ "$cust" =~ ^[a-z0-9][a-z0-9-]{1,30}$ && "$site" =~ ^[a-z0-9][a-z0-9-]{0,30}$ ]] || continue
   # one row per name MeshCentral knows the computer by (its display name and its real name)
-  rows="$(mc ListDevices --group "${cust} / ${site}" --json 2>/dev/null </dev/null | jq -r '.[] | select(._id | test("^node//[A-Za-z0-9@$_-]+$")) | (._id as $i | [.name, .rname] | map(select(. != null)) | unique[] | ascii_downcase | select(test("^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$")) | "\($i)\t\(.)")' 2>/dev/null)" || continue
-  while IFS=$'\t' read -r id host; do
-    [[ -z "$id" || -z "$host" ]] && continue
-    sql+="INSERT INTO mesh_node (customer_slug, host, node_id) VALUES ('${cust}', '${host}', '${id}') ON CONFLICT (customer_slug, host) DO UPDATE SET node_id = EXCLUDED.node_id, updated_at = now();"$'\n'
+  rows="$(mc ListDevices --group "${cust} / ${site}" --json 2>/dev/null </dev/null | jq -r '.[] | select(._id | test("^node//[A-Za-z0-9@$_-]+$")) | (._id as $i | (((.conn // 0) % 2) == 1) as $on | [.name, .rname] | map(select(. != null)) | unique[] | ascii_downcase | select(test("^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$")) | "\($i)\t\(.)\t\($on)")' 2>/dev/null)" || continue
+  while IFS=$'\t' read -r id host on; do
+    [[ -z "$id" || -z "$host" || ! "$on" =~ ^(true|false)$ ]] && continue
+    sql+="INSERT INTO mesh_node (customer_slug, host, node_id, online) VALUES ('${cust}', '${host}', '${id}', ${on}) ON CONFLICT (customer_slug, host) DO UPDATE SET node_id = EXCLUDED.node_id, online = EXCLUDED.online, updated_at = now();"$'\n'
   done <<<"$rows"
 done < generated/sites.tsv
 [[ -n "$sql" ]] || exit 0
