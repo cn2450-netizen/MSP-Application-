@@ -159,6 +159,10 @@ try {
         # Delayed start: at boot, on a slow or busy computer, Windows gave up after 30 s waiting for the service (event 7009) and the
         # agent stayed stopped until someone started it. --auto-restart only covers a crash, not a start that timed out.
         [void](Invoke-Native 'sc.exe' @('config', $ServiceName, 'start=', 'delayed-auto'))
+        # Delayed start alone was not enough on slow-booting servers (Pweb still hit 7009 at 30 s): give every service 120 s to
+        # answer at start-up. System-wide setting, read at boot, so it applies from the next restart.
+        try { Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control' -Name 'ServicesPipeTimeout' -Value 120000 -Type DWord }
+        catch { Write-Warning "Could not set ServicesPipeTimeout: $($_.Exception.Message)" }
         # Start from a clean log so errors from an earlier run (or the config check) can't be mistaken for this one.
         $logFile = Join-Path $InstallDir 'telegraf.log'
         if (Test-Path $logFile) { Remove-Item -Force -Path $logFile }
