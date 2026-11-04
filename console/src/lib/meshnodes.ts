@@ -10,6 +10,7 @@ export async function loadNodes(): Promise<Map<string, string>> {
   }
 }
 
-// Opens that computer in MeshCentral on its Desktop tab (viewmode 11). MeshCentral's gotonode wants only the short id: it builds
-// "node/<domain>/<id>" itself, so the full "node//<id>" never matched a device and the page stayed blank.
-export const connectUrl = (mesh: string, nodeId: string) => `${mesh}/?viewmode=11&gotonode=${encodeURIComponent(nodeId.split("/")[2] ?? nodeId)}`;
+// Opens that computer in MeshCentral on its Desktop tab (viewmode 11). Uses ?node= (the server picks the device before the page
+// loads; MeshCentral's own "open in new window" uses it) with the short id: the server builds "node/<domain>/<id>" itself.
+// The client-side ?gotonode= left a blank Desktop tab with no computer selected.
+export const connectUrl = (mesh: string, nodeId: string) => `${mesh}/?node=${encodeURIComponent(nodeId.split("/")[2] ?? nodeId)}&viewmode=11`;
