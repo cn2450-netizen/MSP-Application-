@@ -2,6 +2,7 @@ import type { Scope } from "./authz";
 import { listMachines, health, type MachineRow } from "./data";
 import { driveState, listComputers, type Drive } from "./bitlocker";
 import type { View } from "./view";
+import { q } from "./db";
 
 export type FleetDrive = Drive & { state: ReturnType<typeof driveState> };
 export type FleetRow = {
@@ -28,7 +29,9 @@ export async function loadFleet(scope: Scope, view: View): Promise<{ rows: Fleet
     online: !!base.lastSeen && Date.now() - new Date(base.lastSeen).getTime() < ONLINE_MS,
     backup: base.m ? health(base.m) : null,
   });
-  const rows: FleetRow[] = computers.filter((c) => inView(c.customer_slug, c.site_slug)).map((c) => mk({
+  // Retired computers (replaced or removed) are hidden everywhere, even while old monitoring data for them is still in InfluxDB.
+  const retired = new Set((await q<{ customer_slug: string; name: string }>("SELECT customer_slug, name FROM machine WHERE retired")).map((m) => `${m.customer_slug}|${m.name.toLowerCase()}`));
+  const rows: FleetRow[] = computers.filter((c) => inView(c.customer_slug, c.site_slug) && !retired.has(`${c.customer_slug}|${c.host}`)).map((c) => mk({
     key: `${c.customer_slug}|${c.host}`, slug: c.customer_slug, customerName: c.customer_name, host: c.host, name: c.name, site: c.site_slug,
     lastSeen: c.last_seen, drives: c.drives.map((d) => ({ ...d, state: driveState(d) })), m: byKey.get(`${c.customer_slug}|${c.host}`),
   }));
