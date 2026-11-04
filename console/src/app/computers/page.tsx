@@ -5,6 +5,8 @@ import { ago, when } from "@/lib/format";
 import { loadHealth, type Light } from "@/lib/health";
 import { loadStuck } from "@/lib/agentupdate";
 import { isStaffFor } from "@/lib/authz";
+import { env } from "@/lib/env";
+import { connectUrl, loadNodes } from "@/lib/meshnodes";
 import { backupNeedsLook, fullyEncrypted, keyMissing, loadFleet, notFullyEncrypted } from "@/lib/fleet";
 import Filters from "../Filters";
 import Pager, { PAGE_SIZE, pageOf } from "../Pager";
@@ -40,7 +42,8 @@ export default async function Computers({ searchParams }: { searchParams: Promis
   const multi = !view.customer && (scope.admin || view.customers.length > 1);
   const page = pageOf(sp.page, shown.length);
   const pageRows = shown.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const [lights, stuck] = await Promise.all([loadHealth(pageRows), loadStuck()]);
+  const [lights, stuck, nodes] = await Promise.all([loadHealth(pageRows), loadStuck(), loadNodes()]);
+  const mesh = env.meshUrl;
 
   return (
     <>
@@ -57,7 +60,7 @@ export default async function Computers({ searchParams }: { searchParams: Promis
         <div className="scroll">
           {shown.length === 0 ? <div className="body muted">{rows.length === 0 ? "No computers have reported yet." : "No computers match these filters."}</div> : (
             <table>
-              <thead><tr><th>Computer</th>{multi && <th>Company</th>}<th className="light-h">Encryption</th><th className="light-h">Backup</th><th className="light-h">Services</th><th className="light-h">Updates</th><th className="light-h">Performance</th><th>Last good backup</th><th>Last seen</th></tr></thead>
+              <thead><tr><th>Computer</th>{multi && <th>Company</th>}{mesh && <th>Remote</th>}<th className="light-h">Encryption</th><th className="light-h">Backup</th><th className="light-h">Services</th><th className="light-h">Updates</th><th className="light-h">Performance</th><th>Last good backup</th><th>Last seen</th></tr></thead>
               <tbody>
                 {pageRows.map((r) => (
                   <tr key={r.key}>
@@ -68,6 +71,13 @@ export default async function Computers({ searchParams }: { searchParams: Promis
                       {stuck.has(r.key) && isStaffFor(scope, r.slug) && <span className="pill bad" style={{ marginLeft: 8 }} title={`Automatic agent update failed ${stuck.get(r.key)!.failures} times: ${stuck.get(r.key)!.reason}. Needs a technician.`}>Agent update stuck</span>}
                     </td>
                     {multi && <td className="muted">{r.customerName}</td>}
+                    {mesh && (
+                      <td>
+                        {isStaffFor(scope, r.slug)
+                          ? <a href={nodes.has(r.key) ? connectUrl(mesh, nodes.get(r.key)!) : mesh} target="_blank" rel="noopener noreferrer" title={nodes.has(r.key) ? `Open ${r.name} in MeshCentral` : `Open MeshCentral and pick ${r.name}`}>Connect ↗</a>
+                          : null}
+                      </td>
+                    )}
                     {(["encryption", "backup", "services", "updates", "performance"] as const).map((k) => <Lamp key={k} light={lights.get(r.key)![k]} what={k} />)}
                     <td className="muted" title={r.m ? when(r.m.last_success) : ""}>{r.m ? ago(r.m.last_success) : ""}</td>
                     <td className="muted" title={when(r.lastSeen)}>{ago(r.lastSeen)}</td>

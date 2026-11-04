@@ -15,7 +15,6 @@ const ICON = {
   computer: "M4 5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zM8 20h8M12 16v4",
   lock: "M6 11V8a6 6 0 0 1 12 0v3M5 11h14a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1zM12 15v2",
   shield: "M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z",
-  remote: "M4 4h16v11H4zM2 19h20M9 9l2 2-2 2M13 13h3",
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
@@ -25,7 +24,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const items = [
     { href: "/", label: "Overview", icon: ICON.home },
     { href: "/computers", label: "Computers", icon: ICON.computer },
-    { href: "/remote", label: "Remote access", icon: ICON.remote },
     ...(classic ? [
       { href: `${classic}/encryption`, label: "Encryption", icon: ICON.lock, external: true },
       { href: `${classic}/backups`, label: "Data protection", icon: ICON.shield, external: true },
