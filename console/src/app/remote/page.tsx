@@ -5,6 +5,7 @@ import { ago, when } from "@/lib/format";
 import { isStaffFor } from "@/lib/authz";
 import { loadFleet } from "@/lib/fleet";
 import { env } from "@/lib/env";
+import { connectUrl, loadNodes } from "@/lib/meshnodes";
 import Filters from "../Filters";
 import Pager, { PAGE_SIZE, pageOf } from "../Pager";
 
@@ -22,6 +23,7 @@ export default async function Remote({ searchParams }: { searchParams: Promise<{
   const view = await getView(scope);
   const { rows, failed } = await loadFleet(scope, view);
   const mesh = env.meshUrl;
+  const nodes = await loadNodes();
 
   const shown = rows.filter((r) => !sp.status || (sp.status === "online" ? r.online : !r.online));
   const multi = !view.customer && (scope.admin || view.customers.length > 1);
@@ -32,7 +34,7 @@ export default async function Remote({ searchParams }: { searchParams: Promise<{
     <>
       <h1>Remote access</h1>
       <p className="sub">
-        Take control of a computer, open a command prompt or transfer files. Remote sessions run in MeshCentral and use the same sign-in as this console.
+        Connect opens a remote desktop session on that computer in MeshCentral (same sign-in as this console). From there you can also open a command prompt or transfer files.
         {mesh && <> <a href={mesh} target="_blank" rel="noopener noreferrer">Open MeshCentral ↗</a></>}
       </p>
       {!mesh && <div className="banner warn">The remote access address is not configured (MESH_HOST).</div>}
@@ -57,7 +59,7 @@ export default async function Remote({ searchParams }: { searchParams: Promise<{
                     <td className="muted" title={when(r.lastSeen)}>{ago(r.lastSeen)}</td>
                     <td>
                       {mesh && isStaffFor(scope, r.slug)
-                        ? <a href={mesh} target="_blank" rel="noopener noreferrer" title={`Open MeshCentral and pick ${r.name}`}>Connect ↗</a>
+                        ? <a href={nodes.has(r.key) ? connectUrl(mesh, nodes.get(r.key)!) : mesh} target="_blank" rel="noopener noreferrer" title={nodes.has(r.key) ? `Open a remote session on ${r.name}` : `Open MeshCentral and pick ${r.name}`}>Connect ↗</a>
                         : <span className="muted small">{mesh ? "Technicians only" : ""}</span>}
                     </td>
                   </tr>
