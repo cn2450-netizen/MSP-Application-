@@ -1,0 +1,14 @@
+# Standalone: this folder runs anywhere Docker runs, on its own.   docker compose up -d --build
+# Point the reverse proxy (Nginx Proxy Manager) at  <this host>:${WEBSITE_PORT}  (plain HTTP); it handles the certificate.
+services:
+  website:
+    build: .
+    image: msp-platform/website:local
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs:
+      - /tmp
+    ports:
+      - "${BIND_ADDR:-127.0.0.1}:${WEBSITE_PORT:-3300}:8080"

@@ -40,7 +40,7 @@ for _ in $(seq 1 30); do iptables -S DOCKER-USER >/dev/null 2>&1 && break; sleep
 NIC="${FW_NIC:-$(ip -4 -o addr show | awk -v b="${BIND_ADDR}" '$4 ~ "^"b"/" {print $2}' | head -1)}"
 [[ -n "$NIC" ]] || { echo "cannot find the network interface that holds ${BIND_ADDR}; set FW_NIC in .env" >&2; exit 1; }
 [[ "${BIND_ADDR}" != "127.0.0.1" ]] || { echo "BIND_ADDR is loopback: the ports are already local only, nothing to do"; exit 0; }
-PORTS="${AUTHENTIK_PORT:-9000} ${GRAFANA_PORT:-3000} ${GATEWAY_PORT:-8080} ${MESH_PORT:-4430} ${RESTIC_PORT:-8000} ${PORTAL_PORT:-3100}"
+PORTS="${AUTHENTIK_PORT:-9000} ${GRAFANA_PORT:-3000} ${GATEWAY_PORT:-8080} ${MESH_PORT:-4430} ${RESTIC_PORT:-8000} ${PORTAL_PORT:-3100} ${WEBSITE_PORT:-3300}"
 ALLOW="${NPM_IP} ${FW_ALLOW_FROM:-}"
 [[ "$NPM_IP" =~ ^[0-9.]+$ ]] || { echo "NPM_IP in .env is not an address" >&2; exit 1; }
 
